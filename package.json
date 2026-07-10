@@ -1,0 +1,15 @@
+{
+  "name": "agentropolis",
+  "version": "0.1.0",
+  "description": "AI agent orchestration you can watch like a city builder. Buildings are agents, trucks are payloads, roads are connections, and you are the Governor.",
+  "type": "module",
+  "main": "src/engine.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/engine.test.js",
+    "demo": "node demo.js",
+    "build": "node build-single.mjs"
+  },
+  "keywords": ["ai", "agents", "orchestration", "simulation", "city", "visualization"],
+  "license": "MIT"
+}

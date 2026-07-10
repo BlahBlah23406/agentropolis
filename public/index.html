@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentropolis — your AI agents, as a city</title>
+<style>
+  :root {
+    --bg: #10141c; --panel: #171d28; --panel2: #1e2635; --ink: #e8edf6;
+    --muted: #93a1b8; --accent: #ffb84d; --green: #55c98a; --road: #2a3142;
+    --chip: #263048;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  header { padding: 14px 20px 6px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; }
+  header .tag { color: var(--muted); }
+  main { display: flex; gap: 14px; padding: 10px 20px 20px; flex-wrap: wrap; }
+  #cityWrap { flex: 1 1 620px; min-width: 320px; }
+  canvas { width: 100%; height: auto; border-radius: 12px; display: block;
+    background: #16321f; box-shadow: 0 4px 24px rgba(0,0,0,.4); cursor: pointer; }
+  #side { flex: 1 1 300px; max-width: 430px; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: var(--panel); border-radius: 12px; padding: 12px 14px; }
+  .card h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--accent); }
+  #orderForm { display: flex; gap: 8px; }
+  #orderText { flex: 1; background: var(--panel2); border: 1px solid #2c374c; color: var(--ink);
+    border-radius: 8px; padding: 9px 11px; font: inherit; }
+  #orderForm button { background: var(--accent); color: #1a1408; border: 0; border-radius: 8px;
+    padding: 9px 14px; font-weight: 700; cursor: pointer; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .chips button { background: var(--chip); color: var(--ink); border: 0; border-radius: 999px;
+    padding: 5px 11px; font-size: 12.5px; cursor: pointer; }
+  .chips button:hover { background: #31405f; }
+  #log { max-height: 200px; overflow-y: auto; font-size: 12.8px; }
+  #log div { padding: 2.5px 0; border-bottom: 1px solid #202940; color: var(--muted); }
+  #log div b { color: var(--ink); font-weight: 500; }
+  #tasks .task { background: var(--panel2); border-radius: 8px; padding: 8px 10px; margin-bottom: 7px; }
+  #tasks .task .st { font-size: 12px; color: var(--green); }
+  #tasks .task .st.moving { color: var(--accent); }
+  #tasks details { margin-top: 5px; font-size: 12.5px; color: var(--muted); }
+  #tasks details div { margin: 4px 0; }
+  #inspector p { color: var(--muted); margin: 4px 0; }
+  #speedRow { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+  #speedRow input { flex: 1; accent-color: var(--accent); }
+  footer { color: #5c6982; padding: 0 20px 18px; font-size: 12.5px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏙️ Agentropolis</h1>
+  <span class="tag">AI agent orchestration you can watch like a city. You are the Governor — type an order, watch the trucks carry it to the right departments.</span>
+</header>
+<main>
+  <div id="cityWrap">
+    <canvas id="city" width="980" height="620"></canvas>
+    <div class="card" style="margin-top:12px">
+      <div id="speedRow">
+        <span>🕐 speed</span>
+        <input id="speed" type="range" min="0.5" max="6" step="0.5" value="2">
+        <span id="speedVal">2×</span>
+        <button id="pauseBtn" style="background:var(--chip);color:var(--ink);border:0;border-radius:8px;padding:6px 12px;cursor:pointer">⏸ pause</button>
+      </div>
+    </div>
+  </div>
+  <div id="side">
+    <div class="card">
+      <h2>🏛️ Governor's Desk</h2>
+      <form id="orderForm">
+        <input id="orderText" placeholder="Issue an order in plain English…" autocomplete="off">
+        <button type="submit">Issue</button>
+      </form>
+      <div class="chips">
+        <button data-o="Schedule a dentist appointment for next week">📅 schedule something</button>
+        <button data-o="Research electric bikes and write a short report">📚 research + write</button>
+        <button data-o="Calculate the budget for a 4-day trip and email it to me">🧮 calc + email</button>
+        <button data-o="Write a haiku about morning traffic">✍️ just write</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>📋 Orders</h2>
+      <div id="tasks"><p style="color:var(--muted)">No orders yet. The city is quiet…</p></div>
+    </div>
+    <div class="card">
+      <h2>🔍 Building Inspector</h2>
+      <div id="inspector"><p>Click a building on the map to see who works there and what they're doing.</p></div>
+    </div>
+    <div class="card">
+      <h2>📰 City Gazette (live log)</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+</main>
+<footer>
+  Runs fully in your browser with mock departments. Point it at an Ollama server (see README) and every building becomes a real LLM agent.
+</footer>
+<script type="module" src="city.js"></script>
+</body>
+</html>
