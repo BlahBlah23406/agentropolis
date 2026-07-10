@@ -5,99 +5,97 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agentropolis — your AI agents, as a city</title>
 <style>
-  :root {
-    --bg: #10141c; --panel: #171d28; --panel2: #1e2635; --ink: #e8edf6;
-    --muted: #93a1b8; --accent: #ffb84d; --green: #55c98a; --road: #2a3142;
-    --chip: #263048;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
-  header { padding: 14px 20px 6px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  header h1 { margin: 0; font-size: 20px; }
-  header .tag { color: var(--muted); }
-  main { display: flex; gap: 14px; padding: 10px 20px 20px; flex-wrap: wrap; }
-  #cityWrap { flex: 1 1 620px; min-width: 320px; }
-  canvas { width: 100%; height: auto; border-radius: 12px; display: block;
-    background: #16321f; box-shadow: 0 4px 24px rgba(0,0,0,.4); cursor: pointer; }
-  #side { flex: 1 1 300px; max-width: 430px; display: flex; flex-direction: column; gap: 12px; }
-  .card { background: var(--panel); border-radius: 12px; padding: 12px 14px; }
-  .card h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase;
-    letter-spacing: .08em; color: var(--accent); }
-  #orderForm { display: flex; gap: 8px; }
-  #orderText { flex: 1; background: var(--panel2); border: 1px solid #2c374c; color: var(--ink);
-    border-radius: 8px; padding: 9px 11px; font: inherit; }
-  #orderForm button { background: var(--accent); color: #1a1408; border: 0; border-radius: 8px;
-    padding: 9px 14px; font-weight: 700; cursor: pointer; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-  .chips button { background: var(--chip); color: var(--ink); border: 0; border-radius: 999px;
-    padding: 5px 11px; font-size: 12.5px; cursor: pointer; }
-  .chips button:hover { background: #31405f; }
-  #log { max-height: 200px; overflow-y: auto; font-size: 12.8px; }
-  #log div { padding: 2.5px 0; border-bottom: 1px solid #202940; color: var(--muted); }
-  #log div b { color: var(--ink); font-weight: 500; }
-  #tasks .task { background: var(--panel2); border-radius: 8px; padding: 8px 10px; margin-bottom: 7px; }
-  #tasks .task .st { font-size: 12px; color: var(--green); }
-  #tasks .task .st.moving { color: var(--accent); }
-  #tasks details { margin-top: 5px; font-size: 12.5px; color: var(--muted); }
-  #tasks details div { margin: 4px 0; }
-  #inspector p { color: var(--muted); margin: 4px 0; }
-  #speedRow { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
-  #speedRow input { flex: 1; accent-color: var(--accent); }
-  footer { color: #5c6982; padding: 0 20px 18px; font-size: 12.5px; }
-  a { color: var(--accent); }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body { background: #6FBA47; overflow: hidden; color: #2d3436;
+    font: 14px/1.45 "Segoe UI", "Nunito", system-ui, sans-serif; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas { width: min(100vw, 158vh); height: auto; display: block; cursor: pointer; }
+
+  .pill { position: fixed; z-index: 5; background: rgba(255,255,255,.93); border-radius: 999px;
+    padding: 8px 16px; box-shadow: 0 2px 10px rgba(0,0,0,.2); font-weight: 700; }
+  #title { top: 12px; left: 12px; }
+  #title small { font-weight: 600; color: #8a8f98; margin-left: 6px; }
+  #stats { top: 12px; right: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  #bar { position: fixed; z-index: 6; bottom: 12px; left: 50%; transform: translateX(-50%);
+    width: min(700px, calc(100vw - 16px)); display: flex; gap: 8px; flex-wrap: wrap;
+    background: rgba(255,255,255,.96); border-radius: 20px; padding: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.28); }
+  #orderForm { display: flex; gap: 8px; flex: 1 1 260px; }
+  #orderText { flex: 1; min-width: 0; border: 2px solid #dfe6e9; border-radius: 12px;
+    padding: 9px 12px; font: inherit; background: #fff; }
+  #orderText:focus { outline: none; border-color: #43A047; }
+  #issueBtn { background: #43A047; color: #fff; border: 0; border-radius: 12px;
+    padding: 9px 16px; font-weight: 800; font-size: 14px; cursor: pointer; }
+  #issueBtn:hover { background: #388E3C; }
+  #barBtns { display: flex; gap: 6px; }
+  #barBtns button { position: relative; width: 42px; height: 40px; border: 0; border-radius: 12px;
+    background: #f1f3f5; font-size: 17px; cursor: pointer; }
+  #barBtns button:hover { background: #e3e7ea; }
+  button:focus-visible, #orderText:focus-visible { outline: 3px solid #74b9ff; outline-offset: 1px; }
+  #ordersBadge { position: absolute; top: -5px; right: -5px; background: #E74C3C; color: #fff;
+    font-size: 11px; font-weight: 800; border-radius: 999px; min-width: 18px; height: 18px;
+    line-height: 18px; display: none; }
+
+  #toasts { position: fixed; z-index: 7; top: 58px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
+    width: min(560px, 94vw); }
+  .toast { background: rgba(255,255,255,.95); border-radius: 999px; padding: 7px 15px;
+    box-shadow: 0 3px 12px rgba(0,0,0,.22); font-size: 13px; font-weight: 600;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    transition: opacity .5s; }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+
+  #popup { position: fixed; z-index: 8; background: #fff; border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.3); padding: 14px 38px 14px 16px;
+    width: min(340px, 94vw); max-height: 52vh; overflow-y: auto; }
+  #popup.sheet { left: 50%; bottom: 76px; top: auto; transform: translateX(-50%);
+    width: min(460px, 94vw); }
+  #popupClose { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px;
+    border: 0; border-radius: 999px; background: #f1f3f5; cursor: pointer; font-size: 13px; }
+  #popup h3 { font-size: 15px; margin-bottom: 2px; }
+  #popup p { color: #636e72; font-size: 13px; margin: 4px 0; }
+  #popup .prow { display: block; width: 100%; text-align: left; font: inherit; border: 0;
+    padding: 8px 10px; border-radius: 10px; background: #f6f8f9; margin-top: 6px;
+    font-size: 13px; cursor: pointer; }
+  #popup .prow:hover { background: #e9eef1; }
+  #popup .prow .st { font-size: 12px; color: #43A047; font-weight: 700; }
+  #popup .prow .st.moving { color: #e67e22; }
+  #popup .result { background: #f6f8f9; border-radius: 10px; padding: 8px 10px; margin-top: 6px;
+    font-size: 13px; }
+  #popup .chip { background: #eaf3ff; border: 0; border-radius: 999px; padding: 8px 12px;
+    margin: 6px 6px 0 0; cursor: pointer; font: inherit; font-size: 13px; }
+  #popup .chip:hover { background: #d8e9ff; }
+  #popup .repairBtn { background: #E74C3C; color: #fff; border: 0; border-radius: 12px;
+    padding: 9px 14px; font-weight: 800; cursor: pointer; margin-top: 8px; font: inherit; }
+  #popup .backLink { background: none; border: 0; color: #2d7dd2; cursor: pointer;
+    font-size: 13px; font-weight: 700; padding: 0; margin-bottom: 6px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>🏙️ Agentropolis</h1>
-  <span class="tag">AI agent orchestration you can watch like a city. You are the Governor — type an order, watch the trucks carry it to the right departments.</span>
-</header>
-<main>
-  <div id="cityWrap">
-    <canvas id="city" width="980" height="620"></canvas>
-    <div class="card" style="margin-top:12px">
-      <div id="speedRow">
-        <span>🕐 speed</span>
-        <input id="speed" type="range" min="0.5" max="6" step="0.5" value="2">
-        <span id="speedVal">2×</span>
-        <button id="pauseBtn" style="background:var(--chip);color:var(--ink);border:0;border-radius:8px;padding:6px 12px;cursor:pointer">⏸ pause</button>
-        <button id="chaosBtn" title="Departments randomly break down — click the smoking building to send a repair crew" style="background:var(--chip);color:var(--ink);border:0;border-radius:8px;padding:6px 12px;cursor:pointer">🌤️ chaos: off</button>
-      </div>
-    </div>
+<div id="wrap"><canvas id="city" width="980" height="620"></canvas></div>
+<div id="title" class="pill">🏙️ Agentropolis <small id="modeTag">mock city</small></div>
+<div id="stats" class="pill" aria-live="off">📬 0 ✅ 0</div>
+<div id="toasts" aria-live="polite"></div>
+<div id="popup" hidden>
+  <button id="popupClose" aria-label="Close">✕</button>
+  <div id="popupBody"></div>
+</div>
+<div id="bar">
+  <form id="orderForm">
+    <input id="orderText" placeholder="Tell your city what to do…" autocomplete="off" aria-label="New order">
+    <button id="issueBtn" type="submit">Issue</button>
+  </form>
+  <div id="barBtns">
+    <button type="button" id="ideasBtn" aria-label="Order ideas" title="Order ideas">✨</button>
+    <button type="button" id="ordersBtn" aria-label="Orders" title="Orders">📋<span id="ordersBadge"></span></button>
+    <button type="button" id="newsBtn" aria-label="City news" title="City news">📰</button>
+    <button type="button" id="chaosBtn" aria-label="Toggle chaos mode" title="Chaos: buildings can break down">🌤️</button>
+    <button type="button" id="speedBtn" aria-label="Simulation speed" title="Speed">2×</button>
+    <button type="button" id="pauseBtn" aria-label="Pause" title="Pause">⏸</button>
   </div>
-  <div id="side">
-    <div class="card">
-      <h2>🏛️ Governor's Desk</h2>
-      <form id="orderForm">
-        <input id="orderText" placeholder="Issue an order in plain English…" autocomplete="off">
-        <button type="submit">Issue</button>
-      </form>
-      <div class="chips">
-        <button data-o="Schedule a dentist appointment for next week">📅 schedule something</button>
-        <button data-o="Research electric bikes and write a short report">📚 research + write</button>
-        <button data-o="Calculate the budget for a 4-day trip and email it to me">🧮 calc + email</button>
-        <button data-o="Write a haiku about morning traffic">✍️ just write</button>
-        <button id="rushBtn" title="Issue 8 orders at once and watch the queues form">🚦 rush hour</button>
-      </div>
-    </div>
-    <div class="card">
-      <h2>📋 Orders</h2>
-      <div id="tasks"><p style="color:var(--muted)">No orders yet. The city is quiet…</p></div>
-    </div>
-    <div class="card">
-      <h2>🔍 Building Inspector</h2>
-      <div id="inspector"><p>Click a building on the map to see who works there and what they're doing.</p></div>
-    </div>
-    <div class="card">
-      <h2>📰 City Gazette (live log)</h2>
-      <div id="log"></div>
-    </div>
-  </div>
-</main>
-<footer>
-  Runs fully in your browser with mock departments. Point it at an Ollama server (see README) and every building becomes a real LLM agent.
-</footer>
+</div>
 <script type="module" src="city.js"></script>
 </body>
 </html>
