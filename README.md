@@ -19,7 +19,15 @@ Type an order in plain English at the Governor's Desk — *"Research electric bi
 write a short report"* — and watch a truck carry it to Dispatch, get routed through the
 Research Library and the Writers' Guild, and come back to City Hall with results.
 
+**▶ [Play it in your browser](https://blahblah23406.github.io/agentropolis/)** — no install, single HTML file.
+
+Try **🚦 rush hour** to issue 8 orders at once and watch queues form, and flip on
+**🌩️ chaos** to see departments break down mid-job — the building smokes and its line
+grows until you click it to send a 🚒 repair crew (that's a retry with a human in the
+loop). Orders that fail three times come home to City Hall with an error note.
+
 ![Agentropolis screenshot](docs/screenshot.png)
+![Chaos mode: buildings break down until you send a repair crew](docs/screenshot-chaos.png)
 
 ## Run it
 
@@ -38,7 +46,10 @@ node server.js        # then open http://localhost:8347
 
 By default departments are mocks so the demo works anywhere. Point the city at any
 [Ollama](https://ollama.com) server and every building becomes a real LLM agent with its
-own role prompt:
+own role prompt — including the **Dispatch Office**, which then genuinely *plans* each
+order's pipeline instead of keyword-matching (plans marked 🧠 in the Gazette). If the
+LLM answers nonsense or is unreachable, Dispatch falls back to keyword routing so no
+order ever dead-ends:
 
 ```bash
 OLLAMA_URL=http://your-ollama-host:11434 node server.js
@@ -61,8 +72,8 @@ See [FEASIBILITY.md](FEASIBILITY.md) for the market/novelty analysis behind this
 
 ## Status
 
-Weekend-sized prototype. Honest limitations: keyword-based dispatch (a real product would
-make the Dispatch Office an LLM planner), sequential pipelines only (no fan-out/join yet),
-no persistence, one hardcoded map.
+Weekend-sized prototype. Honest limitations: sequential pipelines only (no fan-out/join
+yet), no persistence, one hardcoded map, and mock mode's dispatch is keyword-based (LLM
+mode plans for real).
 
 MIT licensed.

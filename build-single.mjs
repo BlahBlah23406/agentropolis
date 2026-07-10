@@ -12,4 +12,6 @@ const out = html.replace('<script type="module" src="city.js"></script>', script
 
 await mkdir('dist', { recursive: true });
 await writeFile('dist/agentropolis.html', out);
-console.log(`Wrote dist/agentropolis.html (${(out.length / 1024).toFixed(0)} KB)`);
+await mkdir('docs', { recursive: true });
+await writeFile('docs/index.html', out); // GitHub Pages serves the repo's /docs folder
+console.log(`Wrote dist/agentropolis.html and docs/index.html (${(out.length / 1024).toFixed(0)} KB)`);

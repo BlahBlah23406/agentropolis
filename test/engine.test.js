@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createCity, issueOrder, tick, runFor, planRoute, roadPath,
-  DEPARTMENTS, buildingRect, llmWorkers,
+  DEPARTMENTS, buildingRect, llmWorkers, llmPlanner, sanitizePlan, sendRepairCrew,
 } from '../src/engine.js';
 
 test('planner routes orders to the right departments', () => {
@@ -73,15 +73,120 @@ test('concurrent orders all complete and are ordered through events', async () =
   assert.equal(deliveries.length, 3);
 });
 
-test('a failing worker returns the order to City Hall with an error note', async () => {
+test('a worker failure breaks the building until a repair crew is sent', async () => {
+  const city = createCity();
+  let attempts = 0;
+  city.workers.math = async () => {
+    attempts++;
+    if (attempts < 2) throw new Error('abacus jammed');
+    return 'numbers crunched on the second try';
+  };
+  const task = issueOrder(city, 'Calculate the budget');
+  await runFor(city, 15);
+
+  assert.ok(city.depts.math.broken, 'Math Works should be broken after the failure');
+  assert.match(task.status, /waiting for repairs/);
+  assert.equal(city.stats.breakdowns, 1);
+  // work does not resume on its own
+  await runFor(city, 5);
+  assert.ok(city.depts.math.broken);
+
+  assert.ok(sendRepairCrew(city, 'math'), 'repair crew should dispatch');
+  assert.equal(sendRepairCrew(city, 'math'), false, 'no duplicate crews');
+  await runFor(city, 30);
+
+  assert.ok(!city.depts.math.broken, 'building repaired');
+  assert.equal(task.status, 'delivered');
+  assert.equal(task.results[0].output, 'numbers crunched on the second try');
+});
+
+test('an order that keeps failing is returned to City Hall after 3 attempts', async () => {
   const city = createCity();
   city.workers.math = async () => { throw new Error('abacus jammed'); };
   const task = issueOrder(city, 'Calculate the budget');
+  for (let i = 0; i < 3; i++) {
+    await runFor(city, 15);
+    sendRepairCrew(city, 'math');
+  }
   await runFor(city, 30);
 
   assert.equal(task.status, 'delivered');
-  assert.match(task.results[0].output, /failed: .*abacus jammed/);
-  assert.ok(city.events.some(e => e.msg.includes('hit a problem')));
+  assert.match(task.results[0].output, /failed after 3 attempts: .*abacus jammed/);
+  assert.equal(city.stats.breakdowns, 3);
+});
+
+test('chaos mode uses the injected random source to trigger breakdowns', async () => {
+  const rolls = [0]; // first job fails, everything after succeeds
+  const city = createCity({ chaos: true, random: () => (rolls.length ? rolls.shift() : 0.99) });
+  const task = issueOrder(city, 'Schedule a team lunch');
+  await runFor(city, 15);
+
+  assert.ok(city.depts.calendar.broken, 'chaos should break the Calendar Bureau');
+  sendRepairCrew(city, 'calendar');
+  await runFor(city, 30);
+
+  assert.equal(task.status, 'delivered');
+  assert.match(task.results[0].output, /Calendar entry/);
+});
+
+test('sanitizePlan validates planner output and rejects nonsense', () => {
+  assert.deepEqual(sanitizePlan('research, writing'), ['research', 'writing']);
+  assert.deepEqual(sanitizePlan('Research → Writing → post'), ['research', 'writing', 'post']);
+  assert.deepEqual(sanitizePlan(['math', 'math', 'writing']), ['math', 'writing']);
+  assert.equal(sanitizePlan('I think the best department would be marketing!'), null);
+  assert.equal(sanitizePlan(''), null);
+  assert.equal(sanitizePlan(undefined), null);
+  // never routes through non-workable buildings
+  assert.equal(sanitizePlan('cityhall, archive, dispatch'), null);
+});
+
+test('an LLM Dispatch plans the route; garbage answers fall back to keywords', async () => {
+  const answers = ['calendar, post', 'the moon department, obviously'];
+  const fakeFetch = async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    if (body.system.includes('Dispatch Office')) {
+      return { ok: true, json: async () => ({ response: answers.shift() }) };
+    }
+    return { ok: true, json: async () => ({ response: 'work done' }) };
+  };
+  const city = createCity({ workers: llmWorkers({ fetchFn: fakeFetch }) });
+
+  const t1 = issueOrder(city, 'Get me on the mayor’s schedule and confirm by mail');
+  await runFor(city, 40);
+  assert.deepEqual(t1.plan, ['calendar', 'post'], 'LLM plan used verbatim');
+  assert.ok(city.events.some(e => e.msg.includes('\u{1F9E0}')), 'plan event marked as LLM-made');
+
+  const t2 = issueOrder(city, 'Schedule a dentist appointment');
+  await runFor(city, 40);
+  assert.deepEqual(t2.plan, ['calendar'], 'nonsense answer fell back to keyword routing');
+  assert.ok(city.events.some(e => e.msg.includes('keyword fallback')));
+});
+
+test('an unreachable LLM planner still delivers via keyword fallback', async () => {
+  const fakeFetch = async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    if (body.system.includes('Dispatch Office')) throw new Error('connection refused');
+    return { ok: true, json: async () => ({ response: 'work done' }) };
+  };
+  const city = createCity({ workers: llmWorkers({ fetchFn: fakeFetch }) });
+  const task = issueOrder(city, 'Write a haiku about roads');
+  await runFor(city, 40);
+
+  assert.equal(task.status, 'delivered');
+  assert.deepEqual(task.plan, ['writing']);
+});
+
+test('llmPlanner sends the order to the endpoint and returns the raw answer', async () => {
+  const calls = [];
+  const fakeFetch = async (url, opts) => {
+    calls.push({ url, body: JSON.parse(opts.body) });
+    return { ok: true, json: async () => ({ response: ' research, writing ' }) };
+  };
+  const plan = llmPlanner({ url: 'http://fake:11434', model: 'm', fetchFn: fakeFetch });
+  const out = await plan({ text: 'compare owls and hawks' });
+  assert.equal(out, 'research, writing');
+  assert.match(calls[0].body.system, /Dispatch Office/);
+  assert.match(calls[0].body.prompt, /compare owls and hawks/);
 });
 
 test('departments respect their concurrency slots (queue forms when busy)', async () => {

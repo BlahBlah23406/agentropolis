@@ -1,3 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentropolis — your AI agents, as a city</title>
+<style>
+  :root {
+    --bg: #10141c; --panel: #171d28; --panel2: #1e2635; --ink: #e8edf6;
+    --muted: #93a1b8; --accent: #ffb84d; --green: #55c98a; --road: #2a3142;
+    --chip: #263048;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  header { padding: 14px 20px 6px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; }
+  header .tag { color: var(--muted); }
+  main { display: flex; gap: 14px; padding: 10px 20px 20px; flex-wrap: wrap; }
+  #cityWrap { flex: 1 1 620px; min-width: 320px; }
+  canvas { width: 100%; height: auto; border-radius: 12px; display: block;
+    background: #16321f; box-shadow: 0 4px 24px rgba(0,0,0,.4); cursor: pointer; }
+  #side { flex: 1 1 300px; max-width: 430px; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: var(--panel); border-radius: 12px; padding: 12px 14px; }
+  .card h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--accent); }
+  #orderForm { display: flex; gap: 8px; }
+  #orderText { flex: 1; background: var(--panel2); border: 1px solid #2c374c; color: var(--ink);
+    border-radius: 8px; padding: 9px 11px; font: inherit; }
+  #orderForm button { background: var(--accent); color: #1a1408; border: 0; border-radius: 8px;
+    padding: 9px 14px; font-weight: 700; cursor: pointer; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .chips button { background: var(--chip); color: var(--ink); border: 0; border-radius: 999px;
+    padding: 5px 11px; font-size: 12.5px; cursor: pointer; }
+  .chips button:hover { background: #31405f; }
+  #log { max-height: 200px; overflow-y: auto; font-size: 12.8px; }
+  #log div { padding: 2.5px 0; border-bottom: 1px solid #202940; color: var(--muted); }
+  #log div b { color: var(--ink); font-weight: 500; }
+  #tasks .task { background: var(--panel2); border-radius: 8px; padding: 8px 10px; margin-bottom: 7px; }
+  #tasks .task .st { font-size: 12px; color: var(--green); }
+  #tasks .task .st.moving { color: var(--accent); }
+  #tasks details { margin-top: 5px; font-size: 12.5px; color: var(--muted); }
+  #tasks details div { margin: 4px 0; }
+  #inspector p { color: var(--muted); margin: 4px 0; }
+  #speedRow { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+  #speedRow input { flex: 1; accent-color: var(--accent); }
+  footer { color: #5c6982; padding: 0 20px 18px; font-size: 12.5px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏙️ Agentropolis</h1>
+  <span class="tag">AI agent orchestration you can watch like a city. You are the Governor — type an order, watch the trucks carry it to the right departments.</span>
+</header>
+<main>
+  <div id="cityWrap">
+    <canvas id="city" width="980" height="620"></canvas>
+    <div class="card" style="margin-top:12px">
+      <div id="speedRow">
+        <span>🕐 speed</span>
+        <input id="speed" type="range" min="0.5" max="6" step="0.5" value="2">
+        <span id="speedVal">2×</span>
+        <button id="pauseBtn" style="background:var(--chip);color:var(--ink);border:0;border-radius:8px;padding:6px 12px;cursor:pointer">⏸ pause</button>
+        <button id="chaosBtn" title="Departments randomly break down — click the smoking building to send a repair crew" style="background:var(--chip);color:var(--ink);border:0;border-radius:8px;padding:6px 12px;cursor:pointer">🌤️ chaos: off</button>
+      </div>
+    </div>
+  </div>
+  <div id="side">
+    <div class="card">
+      <h2>🏛️ Governor's Desk</h2>
+      <form id="orderForm">
+        <input id="orderText" placeholder="Issue an order in plain English…" autocomplete="off">
+        <button type="submit">Issue</button>
+      </form>
+      <div class="chips">
+        <button data-o="Schedule a dentist appointment for next week">📅 schedule something</button>
+        <button data-o="Research electric bikes and write a short report">📚 research + write</button>
+        <button data-o="Calculate the budget for a 4-day trip and email it to me">🧮 calc + email</button>
+        <button data-o="Write a haiku about morning traffic">✍️ just write</button>
+        <button id="rushBtn" title="Issue 8 orders at once and watch the queues form">🚦 rush hour</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>📋 Orders</h2>
+      <div id="tasks"><p style="color:var(--muted)">No orders yet. The city is quiet…</p></div>
+    </div>
+    <div class="card">
+      <h2>🔍 Building Inspector</h2>
+      <div id="inspector"><p>Click a building on the map to see who works there and what they're doing.</p></div>
+    </div>
+    <div class="card">
+      <h2>📰 City Gazette (live log)</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+</main>
+<footer>
+  Runs fully in your browser with mock departments. Point it at an Ollama server (see README) and every building becomes a real LLM agent.
+</footer>
+<script type="module">
 // Agentropolis engine — a task-orchestration simulator dressed as a city.
 // Pure ES module, zero dependencies. Runs in Node (tests, headless demo)
 // and in the browser (the city view just draws this state every frame).
@@ -428,3 +529,302 @@ export async function runFor(city, seconds, step = 0.05) {
     await Promise.resolve();
   }
 }
+
+// Agentropolis city view — draws the engine state every frame.
+
+
+const params = new URLSearchParams(location.search);
+const useLLM = params.get('llm') === '1';
+const city = createCity(useLLM ? {
+  workers: llmWorkers({
+    url: params.get('ollama') || '/api/ollama',
+    model: params.get('model') || 'llama3.2',
+  }),
+} : {});
+
+if (params.get('demo') === '1') {
+  setTimeout(async () => {
+    issueOrder(city, 'Research electric bikes and write a short report');
+    issueOrder(city, 'Schedule a dentist appointment for next week');
+    issueOrder(city, 'Calculate the budget for a 4-day trip and email it to me');
+    // ?ff=12 fast-forwards the sim 12s on load (screenshots, quick previews)
+    if (params.get('ff')) await runFor(city, Number(params.get('ff')));
+  }, 400);
+}
+
+const canvas = document.getElementById('city');
+const ctx = canvas.getContext('2d');
+const logEl = document.getElementById('log');
+const tasksEl = document.getElementById('tasks');
+const inspectorEl = document.getElementById('inspector');
+
+let speed = 2;
+let paused = false;
+let selectedDept = null;
+
+// ------------------------------------------------------------------ input
+
+document.getElementById('orderForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = document.getElementById('orderText');
+  const text = input.value.trim();
+  if (!text) return;
+  issueOrder(city, text);
+  input.value = '';
+});
+
+for (const btn of document.querySelectorAll('.chips button[data-o]')) {
+  btn.addEventListener('click', () => issueOrder(city, btn.dataset.o));
+}
+
+const RUSH_ORDERS = [
+  'Schedule a budget review meeting', 'Research the new bike lanes and write a memo',
+  'Calculate quarterly road maintenance costs', 'Write a speech for the bridge opening',
+  'Send a newsletter about the summer festival', 'Research rival cities and summarize',
+  'Schedule interviews for the new librarian', 'Calculate the parade budget and email it',
+];
+document.getElementById('rushBtn').addEventListener('click', () => {
+  for (const o of RUSH_ORDERS) issueOrder(city, o);
+});
+
+const chaosBtn = document.getElementById('chaosBtn');
+function syncChaosBtn() {
+  chaosBtn.textContent = city.chaos ? '🌩️ chaos: on' : '🌤️ chaos: off';
+  chaosBtn.style.color = city.chaos ? '#ffb84d' : '';
+}
+chaosBtn.addEventListener('click', () => { city.chaos = !city.chaos; syncChaosBtn(); });
+if (params.get('chaos') === '1') city.chaos = true;
+if (params.get('failrate')) city.failRate = Math.min(1, Math.max(0, Number(params.get('failrate'))));
+syncChaosBtn();
+
+const speedInput = document.getElementById('speed');
+speedInput.addEventListener('input', () => {
+  speed = Number(speedInput.value);
+  document.getElementById('speedVal').textContent = speed + '×';
+});
+document.getElementById('pauseBtn').addEventListener('click', (e) => {
+  paused = !paused;
+  e.target.textContent = paused ? '▶ resume' : '⏸ pause';
+});
+
+canvas.addEventListener('click', (e) => {
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) * (CANVAS_W / r.width);
+  const y = (e.clientY - r.top) * (CANVAS_H / r.height);
+  selectedDept = null;
+  for (const id of Object.keys(DEPARTMENTS)) {
+    const b = buildingRect(id);
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) selectedDept = id;
+  }
+  // clicking a smoking building sends the repair crew straight away
+  if (selectedDept && city.depts[selectedDept].broken) sendRepairCrew(city, selectedDept);
+  renderInspector();
+});
+
+inspectorEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-repair]');
+  if (btn) { sendRepairCrew(city, btn.dataset.repair); renderInspector(); }
+});
+
+city.onEvent = (ev) => {
+  const div = document.createElement('div');
+  div.innerHTML = `<b>${ev.msg.replace(/</g, '&lt;')}</b>`;
+  logEl.prepend(div);
+  while (logEl.children.length > 60) logEl.lastChild.remove();
+  renderTasks();
+  renderInspector();
+};
+
+// ------------------------------------------------------------------ panels
+
+function renderTasks() {
+  const tasks = Object.values(city.tasks).slice(-8).reverse();
+  if (!tasks.length) return;
+  tasksEl.innerHTML = tasks.map(t => {
+    const moving = t.status !== 'delivered';
+    const results = t.results.map(r =>
+      `<div><b>${DEPARTMENTS[r.dept].emoji} ${DEPARTMENTS[r.dept].name}:</b> ${esc(r.output)}</div>`).join('');
+    return `<div class="task">
+      <div>#${t.id} — ${esc(t.text)}</div>
+      <div class="st ${moving ? 'moving' : ''}">${moving ? '🚚 ' : '✅ '}${esc(t.status)}</div>
+      ${t.results.length ? `<details ${!moving ? 'open' : ''}><summary>results (${t.results.length})</summary>${results}</details>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderInspector() {
+  if (!selectedDept) return;
+  const d = DEPARTMENTS[selectedDept];
+  const state = city.depts[selectedDept];
+  const busy = state.slots.filter(s => s.job).length;
+  const jobs = state.slots.filter(s => s.job)
+    .map(s => `<p>👷 working on order #${s.job.taskId} (${Math.max(0, s.job.remaining).toFixed(1)}s left)</p>`).join('');
+  const crewComing = city.vehicles.some(v => v.kind === 'repair' && v.to === selectedDept);
+  const broken = state.broken
+    ? (crewComing
+      ? `<p style="color:#ffb84d">🚒 A repair crew is on its way…</p>`
+      : `<p style="color:#e05555"><b>💥 Breakdown!</b> Work is stopped and the line is growing.</p>
+         <button data-repair="${selectedDept}" style="background:#e05555;color:#fff;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:700">🚒 Send repair crew</button>`)
+    : '';
+  inspectorEl.innerHTML = `
+    <div style="font-size:16px">${d.emoji} <b>${d.name}</b></div>
+    <p>${d.desc}</p>
+    <p>👥 ${state.slots.length} worker${state.slots.length > 1 ? 's' : ''} · ${busy} busy · ${state.queue.length} waiting in line</p>
+    ${broken}${jobs}`;
+}
+
+function esc(s) { return String(s).replace(/</g, '&lt;'); }
+
+// ------------------------------------------------------------------ drawing
+
+const DEPT_COLORS = {
+  cityhall: '#c9a13b', dispatch: '#5b8dd9', research: '#9b6dd6', math: '#d96b6b',
+  calendar: '#4db6a2', writing: '#d98cc0', post: '#d9a05b', archive: '#8a93a6',
+};
+
+function draw() {
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  // grass + park details
+  ctx.fillStyle = '#1d3a27';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.fillStyle = '#234730';
+  for (let i = 0; i < 40; i++) {
+    ctx.fillRect((i * 173) % CANVAS_W, (i * 97) % CANVAS_H, 3, 3);
+  }
+  // main street
+  ctx.fillStyle = '#2a3142';
+  ctx.fillRect(0, ROAD_Y - 26, CANVAS_W, 52);
+  ctx.strokeStyle = '#f4c542';
+  ctx.setLineDash([18, 14]);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, ROAD_Y); ctx.lineTo(CANVAS_W, ROAD_Y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // driveways
+  for (const id of Object.keys(DEPARTMENTS)) {
+    const door = doorPoint(id);
+    ctx.fillStyle = '#2a3142';
+    const top = Math.min(door.y, ROAD_Y - 26);
+    const bot = Math.max(door.y, ROAD_Y + 26);
+    ctx.fillRect(door.x - 12, top, 24, bot - top);
+  }
+  // buildings
+  for (const id of Object.keys(DEPARTMENTS)) {
+    const d = DEPARTMENTS[id];
+    const b = buildingRect(id);
+    const state = city.depts[id];
+    const busy = state.slots.filter(s => s.job).length;
+    // shadow + walls
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    roundRect(b.x + 4, b.y + 5, b.w, b.h, 10); ctx.fill();
+    ctx.fillStyle = DEPT_COLORS[id];
+    roundRect(b.x, b.y, b.w, b.h, 10); ctx.fill();
+    if (selectedDept === id) {
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+      roundRect(b.x, b.y, b.w, b.h, 10); ctx.stroke();
+    }
+    if (state.broken) {
+      ctx.strokeStyle = `rgba(224,85,85,${0.6 + 0.4 * Math.sin(city.time * 5)})`;
+      ctx.lineWidth = 4;
+      roundRect(b.x, b.y, b.w, b.h, 10); ctx.stroke();
+      // smoke puffs drifting up from the roof
+      for (let i = 0; i < 3; i++) {
+        const phase = (city.time * 0.7 + i / 3) % 1;
+        ctx.beginPath();
+        ctx.arc(b.x + b.w * (0.3 + i * 0.2) + Math.sin(city.time * 2 + i) * 5,
+          b.y - 6 - phase * 34, 5 + phase * 8, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(160,160,170,${0.55 * (1 - phase)})`;
+        ctx.fill();
+      }
+    }
+    // roof band
+    ctx.fillStyle = 'rgba(0,0,0,.22)';
+    roundRect(b.x, b.y, b.w, 26, 10); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${d.emoji} ${d.name}`, b.x + b.w / 2, b.y + 18);
+    // worker dots (green idle, orange busy, pulsing)
+    const n = state.slots.length;
+    for (let i = 0; i < n; i++) {
+      const wx = b.x + b.w / 2 + (i - (n - 1) / 2) * 26;
+      const wy = b.y + 62;
+      const slot = state.slots[i];
+      ctx.beginPath();
+      const pulse = slot.job ? 2 * Math.abs(Math.sin(city.time * 4)) : 0;
+      ctx.arc(wx, wy, 8 + pulse, 0, Math.PI * 2);
+      ctx.fillStyle = slot.job ? '#ffb84d' : '#55c98a';
+      ctx.fill();
+      ctx.fillStyle = '#1a1408';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(slot.job ? '⚙' : '·', wx, wy + 3);
+    }
+    // queue badge
+    if (state.queue.length) {
+      ctx.fillStyle = '#e05555';
+      ctx.beginPath(); ctx.arc(b.x + b.w - 16, b.y + 42, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif';
+      ctx.fillText(String(state.queue.length), b.x + b.w - 16, b.y + 46);
+    }
+    // status line
+    ctx.fillStyle = state.broken ? '#ffd0d0' : 'rgba(255,255,255,.85)';
+    ctx.font = state.broken ? 'bold 11px "Segoe UI", sans-serif' : '11px "Segoe UI", sans-serif';
+    ctx.fillText(state.broken ? '💥 broken — click to repair' : busy ? `${busy} working` : 'idle',
+      b.x + b.w / 2, b.y + b.h - 12);
+  }
+  // trucks
+  for (const v of city.vehicles) {
+    const { x, y } = v.pos;
+    ctx.font = '22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(v.kind === 'result' ? '🚛' : v.kind === 'archive' ? '🛻' : v.kind === 'repair' ? '🚒' : '🚚', x, y + 8);
+    if (v.taskId != null) {
+      ctx.fillStyle = '#0c0f16';
+      roundRect(x - 16, y - 30, 32, 16, 6); ctx.fill();
+      ctx.fillStyle = '#ffd27a';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(`#${v.taskId}`, x, y - 18);
+    }
+  }
+  // city stats plaque
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(12,15,22,.75)';
+  roundRect(12, CANVAS_H - 36, 470, 26, 8); ctx.fill();
+  ctx.fillStyle = '#e8edf6';
+  ctx.font = '12px "Segoe UI", sans-serif';
+  ctx.fillText(
+    `📬 orders: ${city.stats.issued}   ✅ delivered: ${city.stats.delivered}   🚚 on the road: ${city.vehicles.length}   💥 breakdowns: ${city.stats.breakdowns}${useLLM ? '   🧠 LLM mode' : '   🧪 mock mode'}`,
+    24, CANVAS_H - 19);
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// ------------------------------------------------------------------ loop
+
+let last = performance.now();
+let panelTimer = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (!paused) {
+    tick(city, dt * speed);
+    panelTimer += dt;
+    if (panelTimer > 0.4) { panelTimer = 0; renderTasks(); renderInspector(); }
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+</script>
+</body>
+</html>

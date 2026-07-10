@@ -1,7 +1,7 @@
 // Agentropolis city view — draws the engine state every frame.
 import {
-  createCity, issueOrder, tick, DEPARTMENTS, buildingRect, doorPoint,
-  ROAD_Y, CANVAS_W, CANVAS_H, llmWorkers,
+  createCity, issueOrder, tick, runFor, DEPARTMENTS, buildingRect, doorPoint,
+  ROAD_Y, CANVAS_W, CANVAS_H, llmWorkers, sendRepairCrew,
 } from '../src/engine.js';
 
 const params = new URLSearchParams(location.search);
@@ -14,10 +14,12 @@ const city = createCity(useLLM ? {
 } : {});
 
 if (params.get('demo') === '1') {
-  setTimeout(() => {
+  setTimeout(async () => {
     issueOrder(city, 'Research electric bikes and write a short report');
     issueOrder(city, 'Schedule a dentist appointment for next week');
     issueOrder(city, 'Calculate the budget for a 4-day trip and email it to me');
+    // ?ff=12 fast-forwards the sim 12s on load (screenshots, quick previews)
+    if (params.get('ff')) await runFor(city, Number(params.get('ff')));
   }, 400);
 }
 
@@ -42,9 +44,29 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
   input.value = '';
 });
 
-for (const btn of document.querySelectorAll('.chips button')) {
+for (const btn of document.querySelectorAll('.chips button[data-o]')) {
   btn.addEventListener('click', () => issueOrder(city, btn.dataset.o));
 }
+
+const RUSH_ORDERS = [
+  'Schedule a budget review meeting', 'Research the new bike lanes and write a memo',
+  'Calculate quarterly road maintenance costs', 'Write a speech for the bridge opening',
+  'Send a newsletter about the summer festival', 'Research rival cities and summarize',
+  'Schedule interviews for the new librarian', 'Calculate the parade budget and email it',
+];
+document.getElementById('rushBtn').addEventListener('click', () => {
+  for (const o of RUSH_ORDERS) issueOrder(city, o);
+});
+
+const chaosBtn = document.getElementById('chaosBtn');
+function syncChaosBtn() {
+  chaosBtn.textContent = city.chaos ? '🌩️ chaos: on' : '🌤️ chaos: off';
+  chaosBtn.style.color = city.chaos ? '#ffb84d' : '';
+}
+chaosBtn.addEventListener('click', () => { city.chaos = !city.chaos; syncChaosBtn(); });
+if (params.get('chaos') === '1') city.chaos = true;
+if (params.get('failrate')) city.failRate = Math.min(1, Math.max(0, Number(params.get('failrate'))));
+syncChaosBtn();
 
 const speedInput = document.getElementById('speed');
 speedInput.addEventListener('input', () => {
@@ -65,7 +87,14 @@ canvas.addEventListener('click', (e) => {
     const b = buildingRect(id);
     if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) selectedDept = id;
   }
+  // clicking a smoking building sends the repair crew straight away
+  if (selectedDept && city.depts[selectedDept].broken) sendRepairCrew(city, selectedDept);
   renderInspector();
+});
+
+inspectorEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-repair]');
+  if (btn) { sendRepairCrew(city, btn.dataset.repair); renderInspector(); }
 });
 
 city.onEvent = (ev) => {
@@ -101,11 +130,18 @@ function renderInspector() {
   const busy = state.slots.filter(s => s.job).length;
   const jobs = state.slots.filter(s => s.job)
     .map(s => `<p>👷 working on order #${s.job.taskId} (${Math.max(0, s.job.remaining).toFixed(1)}s left)</p>`).join('');
+  const crewComing = city.vehicles.some(v => v.kind === 'repair' && v.to === selectedDept);
+  const broken = state.broken
+    ? (crewComing
+      ? `<p style="color:#ffb84d">🚒 A repair crew is on its way…</p>`
+      : `<p style="color:#e05555"><b>💥 Breakdown!</b> Work is stopped and the line is growing.</p>
+         <button data-repair="${selectedDept}" style="background:#e05555;color:#fff;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:700">🚒 Send repair crew</button>`)
+    : '';
   inspectorEl.innerHTML = `
     <div style="font-size:16px">${d.emoji} <b>${d.name}</b></div>
     <p>${d.desc}</p>
     <p>👥 ${state.slots.length} worker${state.slots.length > 1 ? 's' : ''} · ${busy} busy · ${state.queue.length} waiting in line</p>
-    ${jobs}`;
+    ${broken}${jobs}`;
 }
 
 function esc(s) { return String(s).replace(/</g, '&lt;'); }
@@ -159,6 +195,20 @@ function draw() {
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
       roundRect(b.x, b.y, b.w, b.h, 10); ctx.stroke();
     }
+    if (state.broken) {
+      ctx.strokeStyle = `rgba(224,85,85,${0.6 + 0.4 * Math.sin(city.time * 5)})`;
+      ctx.lineWidth = 4;
+      roundRect(b.x, b.y, b.w, b.h, 10); ctx.stroke();
+      // smoke puffs drifting up from the roof
+      for (let i = 0; i < 3; i++) {
+        const phase = (city.time * 0.7 + i / 3) % 1;
+        ctx.beginPath();
+        ctx.arc(b.x + b.w * (0.3 + i * 0.2) + Math.sin(city.time * 2 + i) * 5,
+          b.y - 6 - phase * 34, 5 + phase * 8, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(160,160,170,${0.55 * (1 - phase)})`;
+        ctx.fill();
+      }
+    }
     // roof band
     ctx.fillStyle = 'rgba(0,0,0,.22)';
     roundRect(b.x, b.y, b.w, 26, 10); ctx.fill();
@@ -189,16 +239,17 @@ function draw() {
       ctx.fillText(String(state.queue.length), b.x + b.w - 16, b.y + 46);
     }
     // status line
-    ctx.fillStyle = 'rgba(255,255,255,.85)';
-    ctx.font = '11px "Segoe UI", sans-serif';
-    ctx.fillText(busy ? `${busy} working` : 'idle', b.x + b.w / 2, b.y + b.h - 12);
+    ctx.fillStyle = state.broken ? '#ffd0d0' : 'rgba(255,255,255,.85)';
+    ctx.font = state.broken ? 'bold 11px "Segoe UI", sans-serif' : '11px "Segoe UI", sans-serif';
+    ctx.fillText(state.broken ? '💥 broken — click to repair' : busy ? `${busy} working` : 'idle',
+      b.x + b.w / 2, b.y + b.h - 12);
   }
   // trucks
   for (const v of city.vehicles) {
     const { x, y } = v.pos;
     ctx.font = '22px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(v.kind === 'result' ? '🚛' : v.kind === 'archive' ? '🛻' : '🚚', x, y + 8);
+    ctx.fillText(v.kind === 'result' ? '🚛' : v.kind === 'archive' ? '🛻' : v.kind === 'repair' ? '🚒' : '🚚', x, y + 8);
     if (v.taskId != null) {
       ctx.fillStyle = '#0c0f16';
       roundRect(x - 16, y - 30, 32, 16, 6); ctx.fill();
@@ -210,11 +261,11 @@ function draw() {
   // city stats plaque
   ctx.textAlign = 'left';
   ctx.fillStyle = 'rgba(12,15,22,.75)';
-  roundRect(12, CANVAS_H - 36, 330, 26, 8); ctx.fill();
+  roundRect(12, CANVAS_H - 36, 470, 26, 8); ctx.fill();
   ctx.fillStyle = '#e8edf6';
   ctx.font = '12px "Segoe UI", sans-serif';
   ctx.fillText(
-    `📬 orders: ${city.stats.issued}   ✅ delivered: ${city.stats.delivered}   🚚 on the road: ${city.vehicles.length}${useLLM ? '   🧠 LLM mode' : '   🧪 mock mode'}`,
+    `📬 orders: ${city.stats.issued}   ✅ delivered: ${city.stats.delivered}   🚚 on the road: ${city.vehicles.length}   💥 breakdowns: ${city.stats.breakdowns}${useLLM ? '   🧠 LLM mode' : '   🧪 mock mode'}`,
     24, CANVAS_H - 19);
 }
 
