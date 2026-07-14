@@ -2,100 +2,355 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agentropolis — your AI agents, as a city</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070b14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Agentropolis — the OpenClaw government, live</title>
 <style>
+  :root {
+    --bg: #070b14;
+    --panel: rgba(13, 20, 36, .84);
+    --panel-2: rgba(22, 32, 56, .92);
+    --line: rgba(120, 160, 255, .16);
+    --line-strong: rgba(120, 160, 255, .34);
+    --text: #e6eeff;
+    --muted: #8ea4cc;
+    --accent: #4f8ef7;
+    --accent-2: #56c8ff;
+    --gold: #f5c542;
+    --danger: #e5484d;
+    --ok: #46d68c;
+    --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
+    --shadow: 0 8px 28px rgba(2, 6, 16, .55), 0 1px 0 rgba(120,160,255,.06) inset;
+    --shadow-pop: 0 16px 48px rgba(2, 6, 16, .7), 0 1px 0 rgba(120,160,255,.08) inset;
+    --font: 500 14px/1.5 "Segoe UI Variable Text", "Segoe UI", "Inter", system-ui, sans-serif;
+  }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
-  body { background: #6FBA47; overflow: hidden; color: #2d3436;
-    font: 14px/1.45 "Segoe UI", "Nunito", system-ui, sans-serif; }
-  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-  canvas { width: min(100vw, 158vh); height: auto; display: block; cursor: pointer; }
+  body { background: var(--bg); overflow: hidden; color: var(--text); font: var(--font); }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  canvas { width: min(100vw, 186vh); height: auto; aspect-ratio: 1280 / 690; display: block; cursor: pointer;
+    touch-action: none; }
 
-  .pill { position: fixed; z-index: 5; background: rgba(255,255,255,.93); border-radius: 999px;
-    padding: 8px 16px; box-shadow: 0 2px 10px rgba(0,0,0,.2); font-weight: 700; }
-  #title { top: 12px; left: 12px; }
-  #title small { font-weight: 600; color: #8a8f98; margin-left: 6px; }
-  #stats { top: 12px; right: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #recenter { position: fixed; z-index: 6; right: 14px; bottom: 84px; width: 42px; height: 42px;
+    border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--accent-2);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: var(--shadow);
+    cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  #recenter:hover { border-color: var(--line-strong); }
 
-  #bar { position: fixed; z-index: 6; bottom: 12px; left: 50%; transform: translateX(-50%);
-    width: min(700px, calc(100vw - 16px)); display: flex; gap: 8px; flex-wrap: wrap;
-    background: rgba(255,255,255,.96); border-radius: 20px; padding: 10px;
-    box-shadow: 0 6px 24px rgba(0,0,0,.28); }
-  #orderForm { display: flex; gap: 8px; flex: 1 1 260px; }
-  #orderText { flex: 1; min-width: 0; border: 2px solid #dfe6e9; border-radius: 12px;
-    padding: 9px 12px; font: inherit; background: #fff; }
-  #orderText:focus { outline: none; border-color: #43A047; }
-  #issueBtn { background: #43A047; color: #fff; border: 0; border-radius: 12px;
-    padding: 9px 16px; font-weight: 800; font-size: 14px; cursor: pointer; }
-  #issueBtn:hover { background: #388E3C; }
-  #barBtns { display: flex; gap: 6px; }
-  #barBtns button { position: relative; width: 42px; height: 40px; border: 0; border-radius: 12px;
-    background: #f1f3f5; font-size: 17px; cursor: pointer; }
-  #barBtns button:hover { background: #e3e7ea; }
-  button:focus-visible, #orderText:focus-visible { outline: 3px solid #74b9ff; outline-offset: 1px; }
-  #ordersBadge { position: absolute; top: -5px; right: -5px; background: #E74C3C; color: #fff;
-    font-size: 11px; font-weight: 800; border-radius: 999px; min-width: 18px; height: 18px;
-    line-height: 18px; display: none; }
+  .pill { position: fixed; z-index: 5; background: var(--panel);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border: 1px solid var(--line); border-radius: 999px; padding: 9px 18px;
+    box-shadow: var(--shadow); font-weight: 700; letter-spacing: .01em; }
+  #title { top: 14px; left: 14px; }
+  #title small { font-weight: 600; color: var(--muted); margin-left: 8px; font-size: 12px; }
+  #stats { top: 14px; right: 14px; font-weight: 650; font-variant-numeric: tabular-nums;
+    display: flex; gap: 14px; align-items: center; font-size: 13px; }
+  #stats .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
+  #gwpill { top: 62px; right: 14px; font-size: 11.5px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); }
+  #gwpill .dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px;
+    background: var(--ok); box-shadow: 0 0 8px var(--ok); margin-right: 7px; vertical-align: 1px; }
+  #gwpill.down .dot { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
 
-  #toasts { position: fixed; z-index: 7; top: 58px; left: 50%; transform: translateX(-50%);
-    display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
-    width: min(560px, 94vw); }
-  .toast { background: rgba(255,255,255,.95); border-radius: 999px; padding: 7px 15px;
-    box-shadow: 0 3px 12px rgba(0,0,0,.22); font-size: 13px; font-weight: 600;
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    transition: opacity .5s; }
-  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+  /* ledger: the city's live event feed */
+  #feed { position: fixed; z-index: 5; top: 62px; left: 14px; width: min(340px, calc(100vw - 28px));
+    display: flex; flex-direction: column; background: var(--panel);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border: 1px solid var(--line); border-radius: var(--r-lg);
+    box-shadow: var(--shadow); overflow: hidden; max-height: calc(100vh - 170px); }
+  #feedHead { display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 11.5px;
+    font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+    cursor: pointer; user-select: none; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  #feedHead .spacer { flex: 1; }
+  #feed.collapsed #feedList { display: none; }
+  #feed.collapsed { max-height: none; border-radius: 999px; }
+  #feed.collapsed #feedHead { border-bottom: 0; }
+  #feed.collapsed #feedSearch { display: none; }
+  #feedList { overflow-y: auto; padding: 6px 8px 8px; }
+  #feedSearch { width: 100%; margin-top: 6px; }
+  #feedSearch input { width: 100%; background: rgba(7,11,20,.55); border: 1px solid var(--line); border-radius: 999px;
+    padding: 5px 12px; color: var(--text); font: inherit; font-size: 12px; }
+  #feedSearch input::placeholder { color: #5d729c; }
+  #feedSearch input:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0 2px rgba(79,142,247,.2); }
+  #feedHead .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--ok);
+    box-shadow: 0 0 8px var(--ok); animation: fp 2s infinite; }
+  @keyframes fp { 50% { opacity: .45; } }
+  #feedHead .spacer { flex: 1; }
+  #feed.collapsed #feedList { display: none; }
+  #feed.collapsed { max-height: none; border-radius: 999px; }
+  #feed.collapsed #feedHead { border-bottom: 0; }
+  #feedList { overflow-y: auto; padding: 6px 8px 8px; }
+  #feedList::-webkit-scrollbar { width: 8px; }
+  #feedList::-webkit-scrollbar-thumb { background: rgba(120,160,255,.2); border-radius: 8px; }
+  .fentry { display: flex; gap: 8px; padding: 6px; font-size: 12.5px; line-height: 1.4;
+    color: #c6d6f2; border-radius: 8px; }
+  .fentry + .fentry { border-top: 1px solid rgba(120,160,255,.07); }
+  .fentry .ft { color: #5d729c; font-size: 11px; font-variant-numeric: tabular-nums; flex: 0 0 auto; padding-top: 1px; }
+  .fentry .fi { flex: 0 0 auto; }
+  .fentry .fmsg { min-width: 0; overflow-wrap: break-word; }
+  .fentry .fmsg b { color: var(--text); }
+  .fentry.order { background: rgba(245,197,66,.08); }
+  .fentry.out { background: rgba(70,214,140,.08); }
+  .fentry.meet { background: rgba(86,200,255,.08); }
+  .fentry.direct { background: rgba(255,93,93,.10); }
+  .fentry.direct .fi .ic { color: #ff5d5d; }
 
-  #popup { position: fixed; z-index: 8; background: #fff; border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.3); padding: 14px 38px 14px 16px;
-    width: min(340px, 94vw); max-height: 52vh; overflow-y: auto; }
-  #popup.sheet { left: 50%; bottom: 76px; top: auto; transform: translateX(-50%);
-    width: min(460px, 94vw); }
-  #popupClose { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px;
-    border: 0; border-radius: 999px; background: #f1f3f5; cursor: pointer; font-size: 13px; }
-  #popup h3 { font-size: 15px; margin-bottom: 2px; }
-  #popup p { color: #636e72; font-size: 13px; margin: 4px 0; }
-  #popup .prow { display: block; width: 100%; text-align: left; font: inherit; border: 0;
-    padding: 8px 10px; border-radius: 10px; background: #f6f8f9; margin-top: 6px;
-    font-size: 13px; cursor: pointer; }
-  #popup .prow:hover { background: #e9eef1; }
-  #popup .prow .st { font-size: 12px; color: #43A047; font-weight: 700; }
-  #popup .prow .st.moving { color: #e67e22; }
-  #popup .result { background: #f6f8f9; border-radius: 10px; padding: 8px 10px; margin-top: 6px;
-    font-size: 13px; }
-  #popup .chip { background: #eaf3ff; border: 0; border-radius: 999px; padding: 8px 12px;
-    margin: 6px 6px 0 0; cursor: pointer; font: inherit; font-size: 13px; }
-  #popup .chip:hover { background: #d8e9ff; }
-  #popup .repairBtn { background: #E74C3C; color: #fff; border: 0; border-radius: 12px;
-    padding: 9px 14px; font-weight: 800; cursor: pointer; margin-top: 8px; font: inherit; }
-  #popup .backLink { background: none; border: 0; color: #2d7dd2; cursor: pointer;
-    font-size: 13px; font-weight: 700; padding: 0; margin-bottom: 6px; }
+  /* command bar: session_input into the Governor's Office */
+  #bar { position: fixed; z-index: 6; bottom: 14px; left: 50%; transform: translateX(-50%);
+    width: min(720px, calc(100vw - 16px)); display: flex; gap: 8px;
+    background: var(--panel); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px; box-shadow: var(--shadow-pop); }
+  #orderForm { display: flex; gap: 8px; flex: 1; }
+  #orderText { flex: 1; min-width: 0; border: 1px solid var(--line-strong); border-radius: var(--r-md);
+    padding: 10px 14px; font: inherit; background: rgba(7,11,20,.6); color: var(--text); }
+  #orderText::placeholder { color: #5d729c; }
+  #orderText:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(245,197,66,.18); }
+  #issueBtn { background: linear-gradient(180deg, #ffd75e, #e0a92e); color: #241a02; border: 0;
+    border-radius: var(--r-md); padding: 10px 18px; font-weight: 800; font-size: 14px; cursor: pointer;
+    box-shadow: 0 2px 10px rgba(245,197,66,.3); }
+  #issueBtn:hover { filter: brightness(1.06); }
+  #issueBtn:disabled { filter: grayscale(.7); cursor: wait; }
+
+  #toasts { position: fixed; z-index: 7; top: 62px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 7px; pointer-events: none;
+    width: min(620px, 94vw); }
+  .toast { background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 999px; padding: 8px 16px; box-shadow: var(--shadow); font-size: 13px; font-weight: 600;
+    max-width: 100%; overflow: hidden; transition: opacity .5s;
+    display: flex; align-items: center; gap: 8px; justify-content: center; }
+  .toast span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toast .ic { color: var(--accent-2); }
+  .toast.err .ic { color: #ff9196; }
+  .ic { vertical-align: -2px; flex: 0 0 auto; }
+  .fentry .fi .ic { color: var(--accent-2); margin-top: 1px; }
+  .fentry.err .fi .ic { color: #ff9196; }
+  .fmsg .ic { vertical-align: -2px; margin: 0 1px; color: var(--accent-2); }
+  #title .ic, .roomHead .glyph .ic, .cabHead .glyph .ic { color: var(--accent-2); }
+  .seat .chair .ic { color: #c6d6f2; }
+  .seat.gov .chair .ic { color: var(--gold); }
+  .cthink .cg .ic { color: var(--accent-2); }
+  .empty .ic { color: #5d729c; }
+  #meetBanner .ic { color: inherit; }
+  .toast.err { border-color: rgba(229,72,77,.5); background: rgba(64,18,20,.92); color: #ffb3b6; }
+
+  /* ── interior view (building zoom) ─────────────────────────────────────── */
+  #interior { position: fixed; z-index: 8; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(4, 7, 14, .55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  #interior.open { display: flex; }
+  .room { width: min(980px, 94vw); max-height: 88vh; display: flex; flex-direction: column;
+    background: linear-gradient(180deg, rgba(19,28,49,.97), rgba(11,17,30,.97));
+    border: 1px solid var(--line-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); overflow: hidden; }
+  .roomHead { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .roomHead .glyph { font-size: 30px; }
+  .roomHead h2 { font-size: 17px; }
+  .roomHead .who { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+  .roomHead .spacer { flex: 1; }
+  .roomHead .status { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+    border-radius: 999px; padding: 4px 11px; border: 1px solid rgba(70,214,140,.35); color: var(--ok); background: rgba(70,214,140,.1); }
+  .roomHead .status.idle { border-color: var(--line); color: var(--muted); background: rgba(120,160,255,.06); }
+  .roomHead button { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 999px;
+    background: rgba(120,160,255,.08); color: var(--text); cursor: pointer; font-size: 13px; }
+  .roomSys { padding: 8px 18px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .roomSys b { color: #c6d6f2; font-weight: 650; }
+  .roomBody { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .roomCol { min-height: 0; display: flex; flex-direction: column; padding: 12px 16px; }
+  .roomCol + .roomCol { border-left: 1px solid var(--line); }
+  .roomCol h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--accent-2);
+    font-weight: 800; padding-bottom: 8px; display: flex; gap: 7px; align-items: center; }
+  .roomList { flex: 1; overflow-y: auto; min-height: 120px; max-height: 52vh; }
+  .roomList::-webkit-scrollbar { width: 8px; }
+  .roomList::-webkit-scrollbar-thumb { background: rgba(120,160,255,.2); border-radius: 8px; }
+  .think { background: rgba(86,200,255,.06); border: 1px solid rgba(86,200,255,.14); border-left: 3px solid var(--accent-2);
+    border-radius: 10px; padding: 8px 11px; margin-bottom: 7px; font-size: 12.5px; color: #c6d6f2; }
+  .think .tt, .act .tt { display: block; font-size: 10.5px; color: #5d729c; margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+  .act { background: rgba(120,160,255,.06); border: 1px solid rgba(120,160,255,.12); border-radius: 10px;
+    padding: 8px 11px; margin-bottom: 7px; font-size: 12.5px; color: #c6d6f2; }
+  .act .tool { display: inline-block; font-size: 11px; font-weight: 800; background: rgba(79,142,247,.16);
+    border: 1px solid rgba(79,142,247,.35); color: #cfe3ff; border-radius: 999px; padding: 1px 9px; margin-bottom: 4px; }
+  .act.dispatch .tool { background: rgba(245,197,66,.14); border-color: rgba(245,197,66,.4); color: #ffe9ad; }
+  .empty { color: #5d729c; font-size: 12.5px; padding: 10px 4px; }
+
+  /* ── cabinet room (governor zoom) ──────────────────────────────────────── */
+  #cabinet { position: fixed; z-index: 8; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(4, 7, 14, .55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  #cabinet.open { display: flex; }
+  .cabRoom { width: min(1060px, 96vw); max-height: 92vh; display: flex; flex-direction: column;
+    background: linear-gradient(180deg, rgba(26,32,52,.97), rgba(11,17,30,.97));
+    border: 1px solid rgba(245,197,66,.35); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); overflow: hidden; }
+  .cabHead { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .cabHead .glyph { font-size: 30px; }
+  .cabHead h2 { font-size: 17px; color: #ffe9ad; }
+  .cabHead .spacer { flex: 1; }
+  .cabHead button { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 999px;
+    background: rgba(120,160,255,.08); color: var(--text); cursor: pointer; font-size: 13px; }
+  #meetBanner { margin: 12px 18px 0; padding: 9px 14px; border-radius: var(--r-md); font-size: 13px; font-weight: 700;
+    border: 1px solid var(--line); color: var(--muted); background: rgba(120,160,255,.05); }
+  #meetBanner.live { border-color: rgba(245,197,66,.5); color: #ffe9ad; background: rgba(245,197,66,.1);
+    animation: mb 2.2s infinite; }
+  @keyframes mb { 50% { box-shadow: 0 0 18px rgba(245,197,66,.25); } }
+  #cabTableWrap { position: relative; margin: 8px auto 4px; width: min(860px, 92%); aspect-ratio: 860 / 400; flex: 0 0 auto; }
+  #cabTable { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: 62%; height: 46%; border-radius: 50%;
+    background: radial-gradient(ellipse at 50% 35%, #3d3423, #241d10);
+    border: 2px solid rgba(245,197,66,.4); box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 0 8px rgba(245,197,66,.05); }
+  #cabTable .seal { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    font-size: 34px; opacity: .9; }
+  .seat { position: absolute; width: 92px; margin-left: -46px; margin-top: -34px; text-align: center; cursor: default; }
+  .seat .chair { width: 46px; height: 46px; margin: 0 auto; border-radius: 14px 14px 8px 8px;
+    background: linear-gradient(180deg, #1c2740, #131b30); border: 1.5px solid var(--line-strong);
+    display: flex; align-items: center; justify-content: center; font-size: 22px; position: relative;
+    transition: box-shadow .3s, border-color .3s; }
+  .seat.gov .chair { width: 56px; height: 56px; border-color: rgba(245,197,66,.6); font-size: 27px;
+    border-radius: 16px 16px 9px 9px; }
+  .seat .nm { font-size: 10px; color: var(--muted); font-weight: 700; margin-top: 4px; line-height: 1.25; }
+  .seat.active .chair { border-color: var(--accent-2); box-shadow: 0 0 16px rgba(86,200,255,.45); }
+  .seat.active .nm { color: var(--accent-2); }
+  .seat.inmeet .chair::after { content: ""; position: absolute; top: -4px; right: -4px; width: 11px; height: 11px;
+    border-radius: 999px; background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+  .seat .bub { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    width: 180px; background: var(--panel-2); border: 1px solid rgba(86,200,255,.35); border-radius: 10px;
+    padding: 7px 9px; font-size: 11px; line-height: 1.35; color: #c6d6f2; display: none; text-align: left;
+    box-shadow: var(--shadow); pointer-events: none; }
+  .seat .bub::after { content: ""; position: absolute; top: 100%; left: 50%; margin-left: -5px;
+    border: 5px solid transparent; border-top-color: rgba(86,200,255,.35); }
+  .seat.active:hover .bub, .seat.active.showbub .bub { display: block; }
+  #cabThoughts { margin: 4px 18px 14px; overflow-y: auto; min-height: 60px; }
+  #cabThoughts::-webkit-scrollbar { width: 8px; }
+  #cabThoughts::-webkit-scrollbar-thumb { background: rgba(120,160,255,.2); border-radius: 8px; }
+  #cabThoughts h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--accent-2);
+    font-weight: 800; margin: 6px 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #cabThoughts h3 .spacer { flex: 1; }
+  #cabSearch { background: rgba(7,11,20,.55); border: 1px solid var(--line); border-radius: 999px;
+    padding: 5px 12px; color: var(--text); font: inherit; font-size: 12px; min-width: 160px; flex: 1; }
+  #cabSearch::placeholder { color: #5d729c; }
+  #cabSearch:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0 2px rgba(79,142,247,.2); }
+  .cthink { display: flex; gap: 9px; padding: 6px 4px; font-size: 12.5px; color: #c6d6f2;
+    border-top: 1px solid rgba(120,160,255,.07); }
+  .cthink .cg { flex: 0 0 auto; }
+  .cthink .cwho { color: var(--accent-2); font-weight: 700; }
+  .cthink .ct { color: #5d729c; font-size: 11px; flex: 0 0 auto; padding-top: 1px; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 900px) {
+    #feed { width: min(270px, calc(100vw - 28px)); }
+    .roomBody { grid-template-columns: 1fr; }
+    .roomCol + .roomCol { border-left: 0; border-top: 1px solid var(--line); }
+  }
+
+  /* ── phone layout ──────────────────────────────────────────────────────── */
+  @media (max-width: 700px) {
+    /* the map fills the screen height; pan with a finger, pinch to zoom */
+    canvas { height: 100dvh; width: auto; max-width: none; }
+    #title { top: calc(env(safe-area-inset-top, 0px) + 8px); left: 8px; padding: 7px 13px; font-size: 13px; }
+    #title small { display: none; }
+    /* stats move to the bottom-left so the top row stays clear */
+    #stats { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 74px); left: 10px; right: auto;
+      gap: 8px; font-size: 12px; padding: 7px 11px; }
+    #stats .lbl { font-size: 9px; letter-spacing: .04em; margin-right: 3px; }
+    #gwpill { top: calc(env(safe-area-inset-top, 0px) + 9px); right: 8px; font-size: 9.5px; padding: 7px 11px; }
+    #feed { top: calc(env(safe-area-inset-top, 0px) + 50px); left: 8px;
+      width: min(250px, calc(100vw - 148px)); max-height: 46dvh; }
+    #feedSearch input { font-size: 12px; padding: 5px 10px; }
+    .fentry { font-size: 11.5px; }
+    #toasts { top: calc(env(safe-area-inset-top, 0px) + 96px); }
+    #bar { bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); padding: 8px; }
+    #orderText { padding: 9px 12px; font-size: 16px; } /* 16px stops iOS zoom-on-focus */
+    #issueBtn { padding: 9px 13px; font-size: 13px; }
+    #recenter { bottom: calc(env(safe-area-inset-bottom, 0px) + 74px); right: 10px; }
+
+    .room, .cabRoom { width: calc(100vw - 12px); max-height: calc(100dvh - 12px); }
+    .roomHead, .cabHead { padding: 10px 12px; }
+    .roomHead h2, .cabHead h2 { font-size: 15px; }
+    .roomHead .who, .cabHead .who { font-size: 11px; }
+    .roomList { max-height: none; }
+    /* a taller oval + smaller seats so 12 chairs breathe on a narrow screen */
+    #cabTableWrap { width: 92%; aspect-ratio: 860 / 620; margin-top: 26px; }
+    .seat { width: 64px; margin-left: -32px; margin-top: -25px; }
+    .seat .chair { width: 34px; height: 34px; border-radius: 11px 11px 6px 6px; }
+    .seat.gov .chair { width: 42px; height: 42px; }
+    .seat .nm { font-size: 7.5px; margin-top: 3px; }
+    .seat .bub { width: 118px; font-size: 9.5px; padding: 5px 7px; max-height: 68px; overflow: hidden; }
+    #meetBanner { margin: 8px 10px 0; padding: 7px 10px; font-size: 11.5px; }
+    #cabThoughts { margin: 4px 10px 10px; }
+    #cabSearch { width: 100%; min-width: auto; margin-top: 4px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .toast, #meetBanner.live { animation: none; transition: none; } }
 </style>
 </head>
 <body>
-<div id="wrap"><canvas id="city" width="980" height="620"></canvas></div>
-<div id="title" class="pill">🏙️ Agentropolis <small id="modeTag">mock city</small></div>
-<div id="stats" class="pill" aria-live="off">📬 0 ✅ 0</div>
-<div id="toasts" aria-live="polite"></div>
-<div id="popup" hidden>
-  <button id="popupClose" aria-label="Close">✕</button>
-  <div id="popupBody"></div>
+<div id="wrap"><canvas id="city" width="1280" height="690"></canvas></div>
+
+<div id="title" class="pill"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 22h18M5 18v-7M9.5 18v-7M14.5 18v-7M19 18v-7M12 2l9 6H3l9-6z"/></svg> Agentropolis <small>the OpenClaw government, live</small></div>
+<div id="stats" class="pill" aria-live="off">
+  <span><span class="lbl">orders in</span><b id="statIn">0</b></span>
+  <span><span class="lbl">results out</span><b id="statOut">0</b></span>
+  <span><span class="lbl">meetings</span><b id="statMeet">0</b></span>
 </div>
-<div id="bar">
-  <form id="orderForm">
-    <input id="orderText" placeholder="Tell your city what to do…" autocomplete="off" aria-label="New order">
-    <button id="issueBtn" type="submit">Issue</button>
-  </form>
-  <div id="barBtns">
-    <button type="button" id="ideasBtn" aria-label="Order ideas" title="Order ideas">✨</button>
-    <button type="button" id="ordersBtn" aria-label="Orders" title="Orders">📋<span id="ordersBadge"></span></button>
-    <button type="button" id="newsBtn" aria-label="City news" title="City news">📰</button>
-    <button type="button" id="chaosBtn" aria-label="Toggle chaos mode" title="Chaos: buildings can break down">🌤️</button>
-    <button type="button" id="speedBtn" aria-label="Simulation speed" title="Speed">2×</button>
-    <button type="button" id="pauseBtn" aria-label="Pause" title="Pause">⏸</button>
+<div id="gwpill" class="pill"><span class="dot"></span><span id="gwtext">checking the gateway…</span></div>
+
+<div id="feed" aria-live="polite">
+  <div id="feedHead" title="Collapse / expand the city ledger">
+    <span class="dot" id="feedDot"></span> City ledger
+    <span class="spacer"></span><span class="caret">▼</span>
+    <div id="feedSearch"><input id="feedSearchInput" type="search" placeholder="Filter ledger…" autocomplete="off" aria-label="Filter ledger entries"></div>
+  </div>
+  <div id="feedList"></div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<button id="recenter" aria-label="Recenter the map" title="Recenter the map"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3 6.3-2.1z"/></svg></button>
+
+<!-- building interior -->
+<div id="interior">
+  <div class="room">
+    <div class="roomHead">
+      <span class="glyph" id="rGlyph"></span>
+      <div><h2 id="rName">Department</h2><div class="who" id="rWho"></div></div>
+      <span class="spacer"></span>
+      <span class="status" id="rStatus">working</span>
+      <button id="rClose" aria-label="Back to the city">✕</button>
+    </div>
+    <div class="roomSys" id="rSys"></div>
+    <div class="roomBody">
+      <div class="roomCol">
+        <h3><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 1 1 16.1-3.8z"/></svg> The agent — thinking</h3>
+        <div class="roomList" id="rThink"></div>
+      </div>
+      <div class="roomCol">
+        <h3><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> The desk — actions</h3>
+        <div class="roomList" id="rDesk"></div>
+      </div>
+    </div>
   </div>
 </div>
+
+<!-- cabinet meeting room -->
+<div id="cabinet">
+  <div class="cabRoom">
+    <div class="cabHead">
+      <span class="glyph"><svg class="ic" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 22h18M5 18v-7M9.5 18v-7M14.5 18v-7M19 18v-7M12 2l9 6H3l9-6z"/></svg></span>
+      <div><h2>Governor's Office — Cabinet Room</h2><div class="who" style="color:var(--muted);font-size:12.5px">R2-D2 chairs the cabinet while the Governor (you) is away · orders enter and final results leave only through this office</div></div>
+      <span class="spacer"></span>
+      <button id="cabClose" aria-label="Back to the city">✕</button>
+    </div>
+    <div id="meetBanner">No cabinet meeting in session</div>
+    <div id="cabTableWrap">
+      <div id="cabTable"><span class="seal"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="rgba(245,197,66,.75)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 22h18M5 18v-7M9.5 18v-7M14.5 18v-7M19 18v-7M12 2l9 6H3l9-6z"/></svg></span></div>
+      <!-- seats injected by city.js -->
+    </div>
+    <div id="cabThoughts"><h3>Around the table<span class="spacer"></span><input id="cabSearch" type="search" placeholder="Filter ministers…" autocomplete="off" aria-label="Filter cabinet thoughts"></h3><div id="cabThoughtsList"></div></div>
+  </div>
+</div>
+
+<div id="bar">
+  <form id="orderForm">
+    <input id="orderText" placeholder="Governor's order to R2-D2… (runs a real agent turn; the reply also lands in Discord)" autocomplete="off" aria-label="New order">
+    <button id="issueBtn" type="submit">Issue order</button>
+  </form>
+</div>
+
 <script type="module" src="city.js"></script>
 </body>
 </html>

@@ -1,50 +1,59 @@
-// Agentropolis engine — a task-orchestration simulator dressed as a city.
-// Pure ES module, zero dependencies. Runs in Node (tests, headless demo)
-// and in the browser (the city view just draws this state every frame).
+// Agentropolis: R2-D2 Edition — the rebel-base engine.
+// Derived from ~/agentropolis/src/engine.js (MIT). Pure ES module, zero deps.
+// Runs in Node (tests) and the browser (the base view draws this state).
 //
-// The metaphor, mapped to orchestration concepts:
-//   Governor's order  -> user prompt / task
-//   City Hall         -> intake + result delivery (the human's mailbox)
-//   Dispatch Office   -> planner / router (decides the pipeline)
-//   Department        -> specialized agent (calendar, research, writing, ...)
-//   Truck             -> message payload moving between agents
-//   Road              -> connection / channel
-//   Worker dot        -> concurrency slot inside an agent
-//   City Archive      -> long-term memory / task history
+// The metaphor, mapped to THIS machine's real OpenClaw stack:
+//   General's mission    -> user prompt (normally arrives via Discord)
+//   R2-D2 Command Dome   -> OpenClaw gateway: intake + result delivery
+//   War Room             -> cloud-router orchestrator (GLM-5.2)
+//   Holocron Library     -> research specialist (gemma4:31b-cloud)
+//   Astromech Calc-Core  -> math/estimates (nemotron-3-ultra reserve)
+//   Engineering Bay      -> coding delegate (kimi-k2.7-code:cloud)
+//   Protocol Scheduler   -> calendar specialist + cron briefings
+//   Comms Scriptorium    -> drafting/writing (gemma4:31b-cloud)
+//   Shield Generator     -> privacy broker (local redaction, PersonXN)
+//   Hangar Bay           -> deliver-output.mjs (Mac scp -> Taildrop -> Drive)
+//   Memory Vault         -> nomic-embed long-term memory
 
 // ---------------------------------------------------------------- layout ---
 
-export const CANVAS_W = 980;
+export const CANVAS_W = 1220;
 export const CANVAS_H = 620;
-export const ROAD_Y = 310; // main street
+export const ROAD_Y = 310; // main corridor
 const BUILDING_W = 180;
 const BUILDING_H = 112;
 const TOP_ROW_Y = 78;
 const BOTTOM_ROW_Y = 430;
-const COL_X = [28, 268, 508, 748];
+const COL_X = [24, 260, 496, 732, 968];
 
 export const DEPARTMENTS = {
-  cityhall: { id: 'cityhall', name: 'City Hall', emoji: '\u{1F3DB}\u{FE0F}', row: 0, col: 0, workers: 1, duration: 0,
-    desc: "The Governor's seat. Orders leave from here and finished work is delivered back here." },
-  dispatch: { id: 'dispatch', name: 'Dispatch Office', emoji: '\u{1F5FA}\u{FE0F}', row: 0, col: 1, workers: 2, duration: 0.8,
-    desc: 'Reads every order and plans which departments will handle it, in what sequence.' },
-  research: { id: 'research', name: 'Research Library', emoji: '\u{1F4DA}', row: 0, col: 2, workers: 2, duration: 2.2,
-    desc: 'Looks things up and gathers facts.',
-    role: 'You are the Research Library. Gather concise, factual notes on the request. Reply in under 120 words.' },
-  math: { id: 'math', name: 'Math Works', emoji: '\u{1F9EE}', row: 0, col: 3, workers: 2, duration: 1.6,
-    desc: 'Calculations, budgets, estimates, conversions.',
-    role: 'You are Math Works. Do the calculation or estimate requested and show the key numbers. Reply in under 80 words.' },
-  calendar: { id: 'calendar', name: 'Calendar Bureau', emoji: '\u{1F4C5}', row: 1, col: 0, workers: 2, duration: 1.4,
-    desc: 'Scheduling, reminders, appointments.',
-    role: 'You are the Calendar Bureau. Propose a concrete schedule entry (title, day, time) for the request. Reply in under 60 words.' },
-  writing: { id: 'writing', name: "Writers' Guild", emoji: '\u{270D}\u{FE0F}', row: 1, col: 1, workers: 2, duration: 2.4,
-    desc: 'Drafting, summarizing, polishing text.',
-    role: 'You are the Writers’ Guild. Turn the input into a short, polished piece of writing. Reply in under 120 words.' },
-  post: { id: 'post', name: 'Post Office', emoji: '\u{1F4EE}', row: 1, col: 2, workers: 2, duration: 1.0,
-    desc: 'Sends, notifies, delivers to the outside world.',
-    role: 'You are the Post Office. Format the input as a ready-to-send message with a subject line. Reply in under 100 words.' },
-  archive: { id: 'archive', name: 'City Archive', emoji: '\u{1F5C4}\u{FE0F}', row: 1, col: 3, workers: 1, duration: 0.5,
-    desc: 'Long-term memory. Every finished order is filed here.' },
+  command: { id: 'command', name: 'R2-D2 Command Dome', emoji: '\u{1F916}', row: 0, col: 0, workers: 1, duration: 0,
+    desc: 'The little droid himself. Missions launch from here and finished work beeps back. Real system: the OpenClaw gateway (port 18789) + your Discord channel.' },
+  dispatch: { id: 'dispatch', name: 'War Room', emoji: '\u{1F9ED}', row: 0, col: 1, workers: 2, duration: 0.8,
+    desc: 'Reads every mission and plans which bays handle it, in what sequence. Real system: the cloud-router orchestrator, GLM-5.2.' },
+  research: { id: 'research', name: 'Holocron Library', emoji: '\u{1F4DA}', row: 0, col: 2, workers: 2, duration: 2.2,
+    desc: 'Consults the holocrons: looks things up, gathers intel. Real system: gemma4:31b-cloud research specialist.',
+    role: 'You are the Holocron Library of R2-D2’s rebel base. Gather concise, factual notes on the request. Reply in under 120 words.' },
+  engineering: { id: 'engineering', name: 'Engineering Bay', emoji: '\u{1F527}', row: 0, col: 3, workers: 2, duration: 2.6,
+    desc: 'Builds and repairs: code, scripts, apps, pipelines. Real system: kimi-k2.7-code:cloud, the coding delegate.',
+    role: 'You are the Engineering Bay of a rebel base. Produce a short technical plan or code sketch for the request. Reply in under 120 words.' },
+  math: { id: 'math', name: 'Astromech Calc-Core', emoji: '\u{1F9EE}', row: 0, col: 4, workers: 2, duration: 1.6,
+    desc: 'Trajectories, budgets, estimates, conversions. Real system: nemotron-3-ultra / qwen3.5 reserve computronium.',
+    role: 'You are the Astromech Calc-Core. Do the calculation or estimate requested and show the key numbers. Reply in under 80 words.' },
+  calendar: { id: 'calendar', name: 'Protocol Scheduler', emoji: '\u{1F4C5}', row: 1, col: 0, workers: 2, duration: 1.4,
+    desc: 'Scheduling, reminders, appointments. Real system: gemma4-calendar tools + cron (Morning Briefing 05:30, Evening Briefing 22:00).',
+    role: 'You are the Protocol Scheduler droid. Propose a concrete schedule entry (title, day, time) for the request. Reply in under 60 words.' },
+  writing: { id: 'writing', name: 'Comms Scriptorium', emoji: '\u{270D}\u{FE0F}', row: 1, col: 1, workers: 2, duration: 2.4,
+    desc: 'Drafting, summarizing, polishing transmissions. Real system: gemma4:31b-cloud writing specialist.',
+    role: 'You are the Comms Scriptorium of a rebel base. Turn the input into a short, polished piece of writing. Reply in under 120 words.' },
+  shield: { id: 'shield', name: 'Shield Generator', emoji: '\u{1F6E1}\u{FE0F}', row: 1, col: 2, workers: 2, duration: 1.2,
+    desc: 'The privacy broker: redacts names and personal details (PersonX1, UserEmail0) before anything leaves the base for the cloud.',
+    role: 'You are the Shield Generator, the base’s privacy droid. Rewrite the input with every personal name, email, address, and private detail replaced by placeholders like PersonX1 or UserEmail0. Keep everything else intact. Reply in under 100 words.' },
+  post: { id: 'post', name: 'Hangar Bay', emoji: '\u{1F680}', row: 1, col: 3, workers: 2, duration: 1.0,
+    desc: 'Launches finished work off-base. Real system: deliver-output.mjs — scp to the Mac’s Downloads, then Taildrop, then Google Drive.',
+    role: 'You are the Hangar Bay dispatch droid. Format the input as a ready-to-send message with a subject line. Reply in under 100 words.' },
+  archive: { id: 'archive', name: 'Memory Vault', emoji: '\u{1F5C4}\u{FE0F}', row: 1, col: 4, workers: 1, duration: 0.5,
+    desc: 'Long-term memory. Every finished mission is etched here. Real system: nomic-embed-text memory search + MEMORY.md.' },
 };
 
 export function buildingRect(deptId) {
@@ -57,13 +66,13 @@ export function buildingRect(deptId) {
 export function doorPoint(deptId) {
   const r = buildingRect(deptId);
   const d = DEPARTMENTS[deptId];
-  // doors face the main street
+  // doors face the main corridor
   return d.row === 0
     ? { x: r.x + r.w / 2, y: r.y + r.h }
     : { x: r.x + r.w / 2, y: r.y };
 }
 
-// Manhattan path along the driveway -> main street -> driveway.
+// Manhattan path along the ramp -> main corridor -> ramp.
 export function roadPath(fromDept, toDept) {
   const a = doorPoint(fromDept);
   const b = doorPoint(toDept);
@@ -81,11 +90,13 @@ function pathLength(path) {
 // -------------------------------------------------------------- planning ---
 
 const ROUTE_RULES = [
-  { dept: 'research', rx: /research|find|look\s?up|search|learn|what\s+is|who\s+is|compare|history|facts?\b/i },
-  { dept: 'math', rx: /calculat|math|budget|estimat|convert|how\s+much|how\s+many|percent|total|cost/i },
-  { dept: 'writing', rx: /writ|draft|summar|blog|report|essay|poem|caption|rewrite|explain|email|letter|note\b/i },
+  { dept: 'research', rx: /research|find|look\s?up|search|learn|what\s+is|who\s+is|compare|history|facts?\b|intel/i },
+  { dept: 'math', rx: /calculat|math|budget|estimat|convert|how\s+much|how\s+many|percent|total|cost|simulat/i },
+  { dept: 'engineering', rx: /code|coding|script|program|debug|refactor|deploy|app\b|website|web\s?app|pipeline|api\b|fix\s+the|build\s+a/i },
+  { dept: 'writing', rx: /writ|draft|summar|blog|report|essay|poem|caption|rewrite|explain|email|letter|note\b|briefing/i },
   { dept: 'calendar', rx: /schedul|meeting|calendar|remind|appointment|book\b|plan\s+my|event/i },
-  { dept: 'post', rx: /send|email|notify|deliver|message|post\s+it|share/i },
+  { dept: 'shield', rx: /privat|redact|sensitiv|confidential|anonymi[sz]|personal\s+(data|details|info)/i },
+  { dept: 'post', rx: /send|email|notify|deliver|message|post\s+it|share|taildrop|drive\b/i },
 ];
 
 // Deterministic keyword planner — the fallback when no LLM planner is
@@ -96,7 +107,7 @@ export function planRoute(text) {
   return steps;
 }
 
-const WORKABLE = ['research', 'math', 'writing', 'calendar', 'post'];
+const WORKABLE = ['research', 'math', 'engineering', 'writing', 'calendar', 'shield', 'post'];
 
 // Turn a planner's raw answer (string or array) into a valid pipeline,
 // or null if nothing usable survives validation.
@@ -112,19 +123,20 @@ export function sanitizePlan(raw) {
   return plan.length ? plan.slice(0, 4) : null;
 }
 
-// LLM-powered Dispatch Office: reads the order and decides the pipeline.
-export function llmPlanner({ url = 'http://127.0.0.1:11434', model = 'llama3.2', fetchFn } = {}) {
+// LLM-powered War Room: reads the mission and decides the pipeline.
+export function llmPlanner({ url = 'http://127.0.0.1:11434', model = 'gemma4:e2b', fetchFn } = {}) {
   const doFetch = fetchFn || fetch;
-  const system = 'You are the Dispatch Office of a city of AI departments. Departments: '
-    + 'research (looks up facts), math (calculations and estimates), writing (drafts and polishes text), '
-    + 'calendar (scheduling and reminders), post (formats and sends messages out). '
-    + 'Given the Governor’s order, reply with ONLY the department ids that should handle it, '
+  const system = 'You are the War Room of R2-D2’s rebel base of AI departments. Departments: '
+    + 'research (looks up facts and intel), math (calculations and estimates), engineering (writes code and builds apps), '
+    + 'writing (drafts and polishes text), calendar (scheduling and reminders), shield (redacts private details), '
+    + 'post (formats and sends messages out). '
+    + 'Given the General’s mission, reply with ONLY the department ids that should handle it, '
     + 'comma-separated, in processing order. Use 1 to 3 departments. No other words.';
   return async (task) => {
     const res = await doFetch(`${url}/api/generate`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, system, prompt: `Order: ${task.text}`, stream: false }),
+      body: JSON.stringify({ model, system, prompt: `Mission: ${task.text}`, stream: false }),
     });
     if (!res.ok) throw new Error(`planner call failed: ${res.status}`);
     const data = await res.json();
@@ -135,30 +147,34 @@ export function llmPlanner({ url = 'http://127.0.0.1:11434', model = 'llama3.2',
 // ---------------------------------------------------------- mock workers ---
 
 function topicOf(text) {
-  const t = text.replace(/^(please\s+)?(can\s+you\s+)?(research|find|look\s?up|search|write|draft|summarize|schedule|calculate|send|plan)\s*/i, '').trim();
+  const t = text.replace(/^(please\s+)?(can\s+you\s+)?(research|find|look\s?up|search|write|draft|summarize|schedule|calculate|send|plan|build|code)\s*/i, '').trim();
   return (t || text).slice(0, 60);
 }
 
 export function mockWorkers() {
   return {
     research: async (task) =>
-      `Research notes on “${topicOf(task.text)}”: gathered 3 sources, extracted the key facts, flagged 1 open question. (mock output)`,
+      `Holocron intel on “${topicOf(task.text)}”: consulted 3 holocrons, extracted the key facts, flagged 1 open question. (holo-sim output)`,
     math: async (task) =>
-      `Math Works ran the numbers for “${topicOf(task.text)}”: totals computed, 2 scenarios compared. (mock output)`,
+      `Calc-Core ran the numbers for “${topicOf(task.text)}”: totals computed, 2 scenarios compared. (holo-sim output)`,
+    engineering: async (task) =>
+      `Engineering Bay blueprint for “${topicOf(task.text)}”: parts list drafted, code sketch welded together, ready for a test flight. (holo-sim output)`,
     writing: async (task, input) =>
-      `Polished draft based on ${input ? 'the incoming notes' : 'the order'}: “${topicOf(task.text)}” — 3 tight paragraphs, ready to read. (mock output)`,
+      `Polished transmission based on ${input ? 'the incoming intel' : 'the mission'}: “${topicOf(task.text)}” — 3 tight paragraphs, ready to read. (holo-sim output)`,
     calendar: async (task) =>
-      `Calendar entry proposed for “${topicOf(task.text)}”: Thursday 10:00–10:30, reminder 15 min before. (mock output)`,
+      `Protocol entry proposed for “${topicOf(task.text)}”: Thursday 10:00–10:30, reminder 15 min before. (holo-sim output)`,
+    shield: async (task) =>
+      `Shields up: “${topicOf(task.text)}” swept for personal details — 2 names masked as PersonX1/PersonX2, 1 email as UserEmail0. (holo-sim output)`,
     post: async (task) =>
-      `Envelope sealed: “${topicOf(task.text)}” formatted with a subject line and queued for delivery. (mock output)`,
+      `Cargo sealed: “${topicOf(task.text)}” formatted with a subject line and queued for launch. (holo-sim output)`,
   };
 }
 
 // ------------------------------------------------------------ LLM workers ---
-// Optional: point the city at any Ollama server (or an OpenAI-compatible
-// /api/generate proxy) and the departments become real LLM agents.
+// Point the base at any Ollama server and the bays become real LLM agents.
+// On this machine that's the local gemma4:e2b at 127.0.0.1:11434.
 
-export function llmWorkers({ url = 'http://127.0.0.1:11434', model = 'llama3.2', fetchFn } = {}) {
+export function llmWorkers({ url = 'http://127.0.0.1:11434', model = 'gemma4:e2b', fetchFn } = {}) {
   const doFetch = fetchFn || fetch;
   const call = async (system, prompt) => {
     const res = await doFetch(`${url}/api/generate`, {
@@ -174,13 +190,13 @@ export function llmWorkers({ url = 'http://127.0.0.1:11434', model = 'llama3.2',
   for (const d of Object.values(DEPARTMENTS)) {
     if (!d.role) continue;
     workers[d.id] = (task, input) =>
-      call(d.role, input ? `Order: ${task.text}\n\nInput from the previous department:\n${input}` : `Order: ${task.text}`);
+      call(d.role, input ? `Mission: ${task.text}\n\nInput from the previous department:\n${input}` : `Mission: ${task.text}`);
   }
   workers.dispatch = llmPlanner({ url, model, fetchFn });
   return workers;
 }
 
-// ------------------------------------------------------------------ city ---
+// ------------------------------------------------------------------ base ---
 
 const VEHICLE_SPEED = 230; // px per simulated second
 
@@ -189,11 +205,11 @@ export function createCity({ workers, chaos = false, failRate = 0.25, random = M
     time: 0,
     nextId: 1,
     tasks: {},        // id -> task
-    vehicles: [],     // trucks on the road
+    vehicles: [],     // shuttles on the corridor
     events: [],       // { t, msg }
     onEvent: null,
     workers: workers || mockWorkers(),
-    chaos,            // when true, departments randomly break down mid-job
+    chaos,            // when true, Imperial jamming randomly breaks bays mid-job
     failRate,
     random,
     depts: {},        // id -> { queue: [], slots: [{ job|null }], broken }
@@ -216,7 +232,7 @@ export function issueOrder(city, text) {
   const task = {
     id: city.nextId++,
     text,
-    status: 'heading to Dispatch',
+    status: 'heading to the War Room',
     location: 'road',
     plan: null,
     step: 0,
@@ -227,8 +243,8 @@ export function issueOrder(city, text) {
   };
   city.tasks[task.id] = task;
   city.stats.issued++;
-  spawnVehicle(city, task, 'cityhall', 'dispatch', 'order');
-  emit(city, `\u{1F3DB}\u{FE0F} Governor issued order #${task.id}: “${text}”`);
+  spawnVehicle(city, task, 'command', 'dispatch', 'order');
+  emit(city, `\u{1F4E1} The General transmitted mission #${task.id}: “${text}”`);
   return task;
 }
 
@@ -237,7 +253,7 @@ function spawnVehicle(city, task, fromDept, toDept, kind) {
   city.vehicles.push({
     id: `${task ? task.id : 'x'}-${kind}-${city.vehicles.length}-${Math.floor(city.time * 10)}`,
     taskId: task ? task.id : null,
-    kind, // 'order' | 'handoff' | 'result' | 'archive'
+    kind, // 'order' | 'handoff' | 'result' | 'archive' | 'repair'
     from: fromDept,
     to: toDept,
     path,
@@ -270,32 +286,32 @@ function arrive(city, v) {
     city.depts[v.to].queue.push({ taskId: task.id, input: lastOutput(task) });
     task.location = v.to;
     task.status = `queued at ${dept.name}`;
-    emit(city, `\u{1F69A} Order #${task.id} arrived at ${dept.emoji} ${dept.name}`);
+    emit(city, `\u{1F6F8} Mission #${task.id} arrived at ${dept.emoji} ${dept.name}`);
   } else if (v.kind === 'result') {
-    task.location = 'cityhall';
+    task.location = 'command';
     task.status = 'delivered';
     task.deliveredAt = city.time;
     city.stats.delivered++;
-    emit(city, `✅ Order #${task.id} delivered to City Hall (${task.results.length} department${task.results.length === 1 ? '' : 's'} contributed)`);
-    spawnVehicle(city, task, 'cityhall', 'archive', 'archive');
+    emit(city, `✅ Mission #${task.id} delivered to R2-D2 Command (${task.results.length} department${task.results.length === 1 ? '' : 's'} contributed) — beep boop!`);
+    spawnVehicle(city, task, 'command', 'archive', 'archive');
   } else if (v.kind === 'archive') {
     task.archived = true;
-    emit(city, `\u{1F5C4}\u{FE0F} Order #${task.id} filed in the City Archive`);
+    emit(city, `\u{1F5C4}\u{FE0F} Mission #${task.id} etched into the Memory Vault`);
   } else if (v.kind === 'repair') {
     const dept = DEPARTMENTS[v.to];
     city.depts[v.to].broken = false;
-    emit(city, `\u{1F527} ${dept.name} repaired — back to work`);
+    emit(city, `\u{1F527} ${dept.name} repaired — systems back online`);
   }
 }
 
-// The human-in-the-loop fix: a broken building stays broken (smoking, queue
-// piling up) until someone sends a repair crew from City Hall.
+// The human-in-the-loop fix: a broken bay stays broken (sparking, queue
+// piling up) until someone sends an astromech crew from the Command Dome.
 export function sendRepairCrew(city, deptId) {
   const state = city.depts[deptId];
   if (!state || !state.broken) return false;
   if (city.vehicles.some(v => v.kind === 'repair' && v.to === deptId)) return false;
-  spawnVehicle(city, null, 'cityhall', deptId, 'repair');
-  emit(city, `\u{1F692} Repair crew dispatched to ${DEPARTMENTS[deptId].name}`);
+  spawnVehicle(city, null, 'command', deptId, 'repair');
+  emit(city, `\u{1F6E0}\u{FE0F} Astromech crew dispatched to ${DEPARTMENTS[deptId].name}`);
   return true;
 }
 
@@ -305,7 +321,7 @@ function lastOutput(task) {
 
 function startJobs(city) {
   for (const [deptId, state] of Object.entries(city.depts)) {
-    if (state.broken) continue; // no work while the building is smoking
+    if (state.broken) continue; // no work while the bay is sparking
     const meta = DEPARTMENTS[deptId];
     for (const slot of state.slots) {
       if (slot.job || state.queue.length === 0) continue;
@@ -342,7 +358,7 @@ function startJobs(city) {
       } else {
         const fn = city.workers[deptId];
         Promise.resolve()
-          .then(() => (fn ? fn(task, item.input) : `${meta.name} acknowledged the order.`))
+          .then(() => (fn ? fn(task, item.input) : `${meta.name} acknowledged the mission.`))
           .then(out => { job.output = out; job.ready = true; })
           .catch(err => { job.failed = String(err && err.message || err); job.ready = true; });
       }
@@ -358,40 +374,40 @@ function finishJobs(city) {
       if (!job || job.remaining > 0 || !job.ready) continue;
       slot.job = null;
       const task = city.tasks[job.taskId];
-      if (job.willFail && !job.failed) job.failed = 'machinery breakdown';
+      if (job.willFail && !job.failed) job.failed = 'Imperial jamming';
       if (job.failed) {
         task.retries = (task.retries || 0) + 1;
         city.stats.breakdowns++;
         if (task.retries <= 2) {
-          // the building breaks; the order waits inside until a repair crew arrives
+          // the bay breaks; the mission waits inside until an astromech arrives
           state.broken = true;
           state.queue.unshift({ taskId: job.taskId, input: job.input });
           task.status = `waiting for repairs at ${meta.name}`;
-          emit(city, `\u{1F4A5} Breakdown at ${meta.emoji} ${meta.name} while working order #${task.id} (${job.failed}) — send a repair crew!`);
+          emit(city, `\u{1F4A5} Breakdown at ${meta.emoji} ${meta.name} while working mission #${task.id} (${job.failed}) — send an astromech crew!`);
         } else {
-          emit(city, `⚠️ ${meta.name} failed order #${task.id} three times (${job.failed}) — sending it back`);
+          emit(city, `⚠️ ${meta.name} failed mission #${task.id} three times (${job.failed}) — sending it back`);
           task.results.push({ dept: deptId, output: `(failed after 3 attempts: ${job.failed})` });
           task.status = 'returning with errors';
-          spawnVehicle(city, task, deptId, 'cityhall', 'result');
+          spawnVehicle(city, task, deptId, 'command', 'result');
         }
         continue;
       }
       if (deptId === 'dispatch') {
         task.plan = job.output;
         task.step = 0;
-        emit(city, `\u{1F5FA}\u{FE0F} Dispatch planned order #${task.id}: ${task.plan.map(p => DEPARTMENTS[p].name).join(' → ')}${job.planner === 'llm' ? ' \u{1F9E0}' : job.planner === 'keyword fallback' ? ' (keyword fallback)' : ''}`);
+        emit(city, `\u{1F9ED} War Room planned mission #${task.id}: ${task.plan.map(p => DEPARTMENTS[p].name).join(' → ')}${job.planner === 'llm' ? ' \u{1F9E0}' : job.planner === 'keyword fallback' ? ' (keyword fallback)' : ''}`);
         task.status = 'in transit';
         spawnVehicle(city, task, 'dispatch', task.plan[0], 'handoff');
       } else {
         task.results.push({ dept: deptId, output: job.output });
-        emit(city, `${meta.emoji} ${meta.name} finished its part of order #${task.id}`);
+        emit(city, `${meta.emoji} ${meta.name} finished its part of mission #${task.id}`);
         task.step++;
         if (task.plan && task.step < task.plan.length) {
           task.status = 'in transit';
           spawnVehicle(city, task, deptId, task.plan[task.step], 'handoff');
         } else {
-          task.status = 'returning to City Hall';
-          spawnVehicle(city, task, deptId, 'cityhall', 'result');
+          task.status = 'returning to R2-D2 Command';
+          spawnVehicle(city, task, deptId, 'command', 'result');
         }
       }
     }
@@ -400,7 +416,7 @@ function finishJobs(city) {
 
 export function tick(city, dt) {
   city.time += dt;
-  // move trucks
+  // move shuttles
   for (const v of city.vehicles) {
     v.dist += VEHICLE_SPEED * dt;
     v.pos = positionAlong(v.path, Math.min(v.dist, v.total));
@@ -418,7 +434,7 @@ export function tick(city, dt) {
   finishJobs(city);
 }
 
-// Headless helper: advance the city by `seconds`, yielding to the microtask
+// Headless helper: advance the base by `seconds`, yielding to the microtask
 // queue so async workers can resolve. Used by tests and the CLI demo.
 export async function runFor(city, seconds, step = 0.05) {
   let t = 0;

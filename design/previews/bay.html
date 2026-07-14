@@ -1,0 +1,44 @@
+<!-- @dsCard group="Brand" name="Bay building" subtitle="Durasteel hull + accent band/dome/windows, 3 accent variants" -->
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { margin:0; padding:32px; display:flex; gap:28px; flex-wrap:wrap;
+    background:linear-gradient(180deg,#0a1122,#060a13); font:500 12px "Segoe UI",system-ui,sans-serif; }
+  .bay { position:relative; width:180px; height:112px; border-radius:14px;
+    background:linear-gradient(180deg,#1d2a46,#131c31);
+    border:1px solid rgba(130,170,255,.16);
+    box-shadow:0 10px 24px rgba(0,0,0,.5); overflow:hidden; }
+  .band { height:7px; background:linear-gradient(90deg, var(--a-dim), var(--a)); }
+  .band2 { height:6px; background:var(--a); opacity:.28; }
+  .dome { position:absolute; left:50%; top:14px; transform:translateX(-50%);
+    width:46px; height:46px; border-radius:999px; background:#101a2f;
+    border:2px solid var(--a); box-shadow:0 0 0 3px color-mix(in srgb, var(--a) 18%, transparent);
+    display:flex; align-items:center; justify-content:center; font-size:24px; }
+  .win { position:absolute; bottom:26px; left:24px; display:flex; gap:23px; }
+  .win i { width:15px; height:12px; border-radius:3px; background:var(--a); opacity:.22; }
+  .win i.lit { opacity:.75; }
+  .door { position:absolute; bottom:0; left:50%; transform:translateX(-50%);
+    width:18px; height:20px; border-radius:4px 4px 0 0; background:rgba(130,170,255,.12); }
+  .plate { position:absolute; left:50%; transform:translateX(-50%); bottom:-30px; white-space:nowrap;
+    background:rgba(10,16,30,.85); border:1px solid rgba(130,170,255,.14); color:#c9d9f7;
+    border-radius:10px; padding:3px 12px; font-weight:600; font-size:11.5px; }
+  .wrap { position:relative; padding-bottom:34px; }
+</style>
+<div class="wrap"><div class="bay" style="--a:#56c8ff; --a-dim:#3f9ac9">
+  <div class="band"></div><div class="band2"></div>
+  <div class="dome">🤖</div>
+  <div class="win"><i class="lit"></i><i></i><i></i><i></i></div><div class="door"></div>
+  <div class="plate">R2-D2 Command Dome</div>
+</div></div>
+<div class="wrap"><div class="bay" style="--a:#8b7cf7; --a-dim:#6f63d4">
+  <div class="band"></div><div class="band2"></div>
+  <div class="dome">🧭</div>
+  <div class="win"><i class="lit"></i><i class="lit"></i><i></i><i></i></div><div class="door"></div>
+  <div class="plate">War Room</div>
+</div></div>
+<div class="wrap"><div class="bay" style="--a:#f5a742; --a-dim:#cf8a33">
+  <div class="band"></div><div class="band2"></div>
+  <div class="dome">🔧</div>
+  <div class="win"><i></i><i></i><i></i><i></i></div><div class="door"></div>
+  <div class="plate">Engineering Bay</div>
+</div></div>

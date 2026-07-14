@@ -1,0 +1,50 @@
+<!-- @dsCard group="Components" name="Inspector popup" subtitle="Panel, tags, live section, mission rows, repair action" -->
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  :root { --line:rgba(120,160,255,.16); --line-strong:rgba(120,160,255,.32); --text:#e6eeff;
+    --muted:#8ea4cc; --accent:#4f8ef7; --accent-2:#56c8ff; --ok:#46d68c; --warn:#f5a742;
+    --r-sm:10px; --r-lg:20px; }
+  body { margin:0; padding:28px; background:#070b14; color:var(--text);
+    font:500 14px/1.5 "Segoe UI",system-ui,sans-serif; }
+  .popup { background:linear-gradient(180deg,rgba(19,28,49,.96),rgba(12,18,32,.96));
+    border:1px solid var(--line-strong); border-radius:var(--r-lg);
+    box-shadow:0 16px 48px rgba(2,6,16,.7); padding:16px 18px; width:340px; }
+  h3 { font-size:15.5px; margin:0 0 3px; }
+  h4 { font-size:11.5px; margin:14px 0 4px; color:var(--accent-2); text-transform:uppercase;
+    letter-spacing:.09em; font-weight:700; }
+  p { color:var(--muted); font-size:13px; margin:4px 0; }
+  p b { color:var(--text); font-weight:650; }
+  .tag { display:inline-block; font-size:10px; font-weight:800; border-radius:999px; padding:2px 8px;
+    margin-left:6px; letter-spacing:.07em; text-transform:uppercase; }
+  .tag.ok { background:rgba(70,214,140,.14); color:var(--ok); border:1px solid rgba(70,214,140,.35); }
+  .tag.bad { background:rgba(229,72,77,.14); color:#ff9196; border:1px solid rgba(229,72,77,.4); }
+  .prow { display:block; width:100%; text-align:left; font:inherit; font-size:13px;
+    border:1px solid transparent; padding:9px 11px; border-radius:var(--r-sm);
+    background:rgba(120,160,255,.07); color:var(--text); margin-top:6px; cursor:pointer; }
+  .prow .st { font-size:12px; color:var(--ok); font-weight:700; }
+  .prow .st.moving { color:var(--warn); }
+  .result { background:rgba(120,160,255,.07); border:1px solid var(--line);
+    border-radius:var(--r-sm); padding:9px 11px; margin-top:6px; font-size:13px; color:#c6d6f2; }
+  .result.reply { border-left:3px solid var(--ok); }
+  .live { border-left:2px solid var(--accent); padding-left:11px; margin-top:12px; }
+  .repair { background:linear-gradient(180deg,#f0565b,#d63a40); color:#fff; border:0;
+    border-radius:14px; padding:10px 15px; font-weight:800; cursor:pointer; margin-top:8px; font:inherit; }
+</style>
+<div class="popup">
+  <h3>🧭 War Room <span class="tag ok">Live</span></h3>
+  <p>Reads every mission and plans which bays handle it. Real system: <b>GLM-5.2 orchestrator</b>.</p>
+  <p>🤖 2 droids · 1 busy · 3 in line</p>
+  <button class="prow">#4 — Research Seattle AI internships 📡✔<br>
+    <span class="st">✅ delivered</span></button>
+  <button class="prow">#5 — Calculate prayer times for a red-eye flight<br>
+    <span class="st moving">🛸 working at Astromech Calc-Core</span></button>
+  <div class="result reply">📡 <b>R2-D2's actual reply (also sent to Discord)</b><br>
+    beep boop — three internships shortlisted, drafts in your DMs.</div>
+  <div class="live">
+    <h4>📡 live system</h4>
+    <p>· subagent session — <b>kimi-k2.7-code:cloud</b> (2m ago)</p>
+    <p>· cron “Morning Briefing” → ok · next in 16.2h</p>
+  </div>
+  <button class="repair">🛠️ Send astromech crew</button>
+</div>

@@ -1,15 +1,12 @@
 {
-  "name": "agentropolis",
+  "name": "agentropolis-r2d2",
   "version": "0.1.0",
-  "description": "AI agent orchestration you can watch like a city builder. Buildings are agents, trucks are payloads, roads are connections, and you are the Governor.",
+  "description": "R2-D2 Edition of Agentropolis: a live, Star Wars-themed city view of this machine's OpenClaw system. Read-only against OpenClaw state.",
   "type": "module",
   "main": "src/engine.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/engine.test.js",
-    "demo": "node demo.js",
-    "build": "node build-single.mjs"
+    "test": "node --test test/engine.test.js"
   },
-  "keywords": ["ai", "agents", "orchestration", "simulation", "city", "visualization"],
   "license": "MIT"
 }

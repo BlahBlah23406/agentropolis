@@ -1,0 +1,42 @@
+<!-- @dsCard group="Components" name="HUD chrome" subtitle="Glass pills, command bar, buttons, status dot" -->
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  :root { --panel:rgba(13,20,36,.82); --panel-2:rgba(22,32,56,.9); --line:rgba(120,160,255,.16);
+    --line-strong:rgba(120,160,255,.32); --text:#e6eeff; --muted:#8ea4cc; --accent:#4f8ef7;
+    --ok:#46d68c; --danger:#e5484d;
+    --r-md:14px; --r-lg:20px;
+    --shadow:0 8px 28px rgba(2,6,16,.55), 0 1px 0 rgba(120,160,255,.06) inset; }
+  body { margin:0; padding:28px; display:flex; flex-direction:column; gap:18px; align-items:flex-start;
+    background:radial-gradient(600px 300px at 30% 0%, rgba(79,142,247,.08), transparent), #070b14;
+    color:var(--text); font:500 14px/1.5 "Segoe UI",system-ui,sans-serif; }
+  .pill { background:var(--panel); backdrop-filter:blur(14px); border:1px solid var(--line);
+    border-radius:999px; padding:9px 18px; box-shadow:var(--shadow); font-weight:700; }
+  .pill small { font-weight:600; color:var(--muted); margin-left:8px; font-size:12px; }
+  .status { font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:999px; background:var(--ok);
+    box-shadow:0 0 8px var(--ok); margin-right:7px; vertical-align:1px; }
+  .down .dot { background:var(--danger); box-shadow:0 0 8px var(--danger); }
+  .bar { display:flex; gap:8px; background:var(--panel); backdrop-filter:blur(16px);
+    border:1px solid var(--line); border-radius:var(--r-lg); padding:10px; box-shadow:var(--shadow); }
+  input { border:1px solid var(--line-strong); border-radius:var(--r-md); padding:10px 14px;
+    font:inherit; background:rgba(7,11,20,.6); color:var(--text); width:280px; }
+  input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(79,142,247,.22); }
+  .primary { background:linear-gradient(180deg,#5e9bff,#3f7deb); color:#fff; border:0;
+    border-radius:var(--r-md); padding:10px 18px; font-weight:800; font-size:14px; cursor:pointer;
+    box-shadow:0 2px 10px rgba(79,142,247,.35); }
+  .icon { width:42px; height:42px; border:1px solid transparent; border-radius:var(--r-md);
+    background:rgba(120,160,255,.08); font-size:17px; cursor:pointer; }
+  .icon:hover { background:rgba(120,160,255,.16); border-color:var(--line); }
+  .toast { background:var(--panel-2); backdrop-filter:blur(12px); border:1px solid var(--line);
+    border-radius:999px; padding:8px 16px; box-shadow:var(--shadow); font-size:13px; font-weight:600; }
+</style>
+<div class="pill">🤖 R2-D2's Agentropolis <small>🧠 gemma4:e2b</small></div>
+<div class="pill status"><span class="dot"></span>gateway online · 150 sessions</div>
+<div class="pill status down"><span class="dot"></span>gateway unreachable</div>
+<div class="bar">
+  <input placeholder="Transmit a real mission to R2-D2 (replies here + Discord)…">
+  <button class="primary">Transmit</button>
+  <button class="icon">✨</button><button class="icon">🛰️</button><button class="icon">📡</button>
+</div>
+<div class="toast">📨 R2-D2 answered mission #4 — reply sent to Discord</div>

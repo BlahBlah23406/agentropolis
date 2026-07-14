@@ -1,0 +1,50 @@
+/* R2-D2 Agentropolis — design tokens
+   Dark durasteel + holo-cyan system. One hull color for all surfaces;
+   identity is carried by accent colors, never by surface color. */
+:root {
+  /* surfaces */
+  --bg: #070b14;
+  --panel: rgba(13, 20, 36, .82);        /* glass pill / bar (over blur) */
+  --panel-solid: #0e1626;
+  --panel-2: rgba(22, 32, 56, .9);
+  --line: rgba(120, 160, 255, .16);
+  --line-strong: rgba(120, 160, 255, .32);
+
+  /* text */
+  --text: #e6eeff;
+  --muted: #8ea4cc;
+
+  /* semantic */
+  --accent: #4f8ef7;    /* R2 cobalt — primary actions, focus */
+  --accent-2: #56c8ff;  /* holo cyan — live/guide elements, section headers */
+  --danger: #e5484d;    /* R2 red lamp — breakdowns, badges */
+  --warn: #f5a742;      /* processor amber — busy, in-transit */
+  --ok: #46d68c;        /* delivered, healthy */
+
+  /* department accents (hulls stay durasteel; these code identity) */
+  --bay-command: #56c8ff;
+  --bay-dispatch: #8b7cf7;
+  --bay-research: #c084fc;
+  --bay-engineering: #f5a742;
+  --bay-math: #f97066;
+  --bay-calendar: #34d399;
+  --bay-writing: #f472b6;
+  --bay-shield: #38bdf8;
+  --bay-post: #fb923c;
+  --bay-archive: #94a3b8;
+
+  /* canvas scene */
+  --hull-top: #1d2a46;
+  --hull-bottom: #131c31;
+  --hull-edge: rgba(130, 170, 255, .16);
+  --road: #16213a;
+  --road-edge: #101830;
+
+  /* shape + depth */
+  --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
+  --shadow: 0 8px 28px rgba(2, 6, 16, .55), 0 1px 0 rgba(120,160,255,.06) inset;
+  --shadow-pop: 0 16px 48px rgba(2, 6, 16, .7), 0 1px 0 rgba(120,160,255,.08) inset;
+
+  /* type */
+  --font: 500 14px/1.5 "Segoe UI Variable Text", "Segoe UI", "Inter", system-ui, sans-serif;
+}
