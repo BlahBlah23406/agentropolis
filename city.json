@@ -1,0 +1,88 @@
+{
+  "name": "Demo City",
+  "model": "gemma4:e2b",
+  "buildings": [
+    {
+      "template": "research_lab",
+      "id": "research",
+      "name": "Holocron Library",
+      "row": 0,
+      "col": 2,
+      "connections": {
+        "web_search": { "enabled": true }
+      }
+    },
+    {
+      "template": "coding_forge",
+      "id": "engineering",
+      "name": "Engineering Bay",
+      "row": 0,
+      "col": 3,
+      "connections": {
+        "ollama_local": { "url": "http://127.0.0.1:11434" }
+      }
+    },
+    {
+      "template": "calendar_office",
+      "id": "calendar",
+      "name": "Protocol Scheduler",
+      "row": 1,
+      "col": 0,
+      "connections": {
+        "google_calendar": { "account": "demo" }
+      }
+    },
+    {
+      "template": "mail_room",
+      "id": "mail",
+      "name": "Comms Relay",
+      "row": 1,
+      "col": 1,
+      "connections": {
+        "gmail": { "account": "demo" }
+      }
+    },
+    {
+      "template": "memory_vault",
+      "id": "archive",
+      "name": "Memory Vault",
+      "row": 1,
+      "col": 4,
+      "connections": {
+        "ollama_local": { "url": "http://127.0.0.1:11434" }
+      }
+    },
+    {
+      "template": "shield_bureau",
+      "id": "shield",
+      "name": "Shield Generator",
+      "row": 1,
+      "col": 2,
+      "connections": {}
+    },
+    {
+      "template": "math_core",
+      "id": "math",
+      "name": "Astromech Calc-Core",
+      "row": 0,
+      "col": 4,
+      "connections": {}
+    },
+    {
+      "template": "writing_studio",
+      "id": "writing",
+      "name": "Comms Scriptorium",
+      "row": 1,
+      "col": 1,
+      "connections": {}
+    },
+    {
+      "template": "delivery_depot",
+      "id": "post",
+      "name": "Hangar Bay",
+      "row": 1,
+      "col": 3,
+      "connections": {}
+    }
+  ]
+}

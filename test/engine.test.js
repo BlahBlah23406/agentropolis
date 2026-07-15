@@ -235,3 +235,48 @@ test('a base with LLM workers completes a mission end to end', async () => {
   assert.equal(task.results.length, 2);
   assert.match(task.results[0].output, /handled/);
 });
+
+test('custom city + LLM dispatch returns a custom building id without crashing', async () => {
+  const custom = {
+    command: { id: 'command', name: 'Command', emoji: '\u{1F916}', row: 0, col: 0, workers: 1, duration: 0 },
+    dispatch: { id: 'dispatch', name: 'Dispatch', emoji: '\u{1F9ED}', row: 0, col: 1, workers: 1, duration: 0.5 },
+    expense_tracker: { id: 'expense_tracker', name: 'Expense Tracker', emoji: '\u{1F4B8}', row: 0, col: 2, workers: 1, duration: 1.0, role: 'You are an expense tracker.' },
+    archive: { id: 'archive', name: 'Archive', emoji: '\u{1F5C4}\u{FE0F}', row: 1, col: 4, workers: 1, duration: 0.5 },
+  };
+  const fakeFetch = async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    if (body.system && body.system.includes('War Room')) {
+      return { ok: true, json: async () => ({ response: 'expense_tracker' }) };
+    }
+    return { ok: true, json: async () => ({ response: 'work done' }) };
+  };
+  const city = createCity({ departments: custom, workers: llmWorkers({ fetchFn: fakeFetch, departments: custom }) });
+  const task = issueOrder(city, 'Track my expenses');
+  await runFor(city, 40);
+  assert.equal(task.status, 'delivered');
+  assert.deepEqual(task.plan, ['expense_tracker']);
+  assert.ok(city.events.some(e => e.msg.includes('\u{1F9E0}')));
+});
+
+test('sanitizePlan accepts custom allowedIds', () => {
+  assert.deepEqual(sanitizePlan('expense_tracker, budget_core', ['expense_tracker', 'budget_core']), ['expense_tracker', 'budget_core']);
+  assert.deepEqual(sanitizePlan('expense_tracker, research', ['expense_tracker', 'budget_core']), ['expense_tracker']);
+  assert.equal(sanitizePlan('research, writing', ['expense_tracker', 'budget_core']), null);
+});
+
+test('llmPlanner is wired as workers.dispatch with dynamic custom departments', async () => {
+  const custom = {
+    holocron: { id: 'holocron', name: 'Holocron', description: 'Gathers facts.', emoji: '\u{1F4DA}', row: 0, col: 2, workers: 1, duration: 1.0, role: 'You are the Holocron.' },
+    scriptorium: { id: 'scriptorium', name: 'Scriptorium', description: 'Writes things.', emoji: '\u{270D}\u{FE0F}', row: 1, col: 1, workers: 1, duration: 1.0, role: 'You are the Scriptorium.' },
+  };
+  const calls = [];
+  const fakeFetch = async (url, opts) => {
+    calls.push({ body: JSON.parse(opts.body) });
+    return { ok: true, json: async () => ({ response: 'holocron, scriptorium' }) };
+  };
+  const planner = llmPlanner({ url: 'http://fake:11434', model: 'm', fetchFn: fakeFetch, departments: custom });
+  const out = await planner({ text: 'Research owls and write a poem' });
+  assert.equal(out, 'holocron, scriptorium');
+  assert.ok(calls[0].body.system.includes('holocron'));
+  assert.ok(calls[0].body.system.includes('scriptorium'));
+});

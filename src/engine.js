@@ -56,16 +56,17 @@ export const DEPARTMENTS = {
     desc: 'Long-term memory. Every finished mission is etched here. Real system: nomic-embed-text memory search + MEMORY.md.' },
 };
 
-export function buildingRect(deptId) {
-  const d = DEPARTMENTS[deptId];
-  const x = COL_X[d.col];
-  const y = d.row === 0 ? TOP_ROW_Y : BOTTOM_ROW_Y;
+export function buildingRect(deptId, departments = DEPARTMENTS) {
+  const d = departments[deptId];
+  if (!d) throw new Error(`Unknown department "${deptId}"`);
+  const x = COL_X[d.col] ?? 24;
+  const y = (d.row === 0 ? TOP_ROW_Y : BOTTOM_ROW_Y);
   return { x, y, w: BUILDING_W, h: BUILDING_H };
 }
 
-export function doorPoint(deptId) {
-  const r = buildingRect(deptId);
-  const d = DEPARTMENTS[deptId];
+export function doorPoint(deptId, departments = DEPARTMENTS) {
+  const r = buildingRect(deptId, departments);
+  const d = departments[deptId];
   // doors face the main corridor
   return d.row === 0
     ? { x: r.x + r.w / 2, y: r.y + r.h }
@@ -73,9 +74,9 @@ export function doorPoint(deptId) {
 }
 
 // Manhattan path along the ramp -> main corridor -> ramp.
-export function roadPath(fromDept, toDept) {
-  const a = doorPoint(fromDept);
-  const b = doorPoint(toDept);
+export function roadPath(fromDept, toDept, departments = DEPARTMENTS) {
+  const a = doorPoint(fromDept, departments);
+  const b = doorPoint(toDept, departments);
   return [a, { x: a.x, y: ROAD_Y }, { x: b.x, y: ROAD_Y }, b];
 }
 
@@ -101,9 +102,21 @@ const ROUTE_RULES = [
 
 // Deterministic keyword planner — the fallback when no LLM planner is
 // plugged in (or when the LLM one fails or answers nonsense).
-export function planRoute(text) {
-  const steps = ROUTE_RULES.filter(r => r.rx.test(text)).map(r => r.dept);
-  if (steps.length === 0) return ['research', 'writing']; // sensible default pipeline
+// When a custom `departments` map is provided, it only routes through ids that exist.
+export function planRoute(text, departments = DEPARTMENTS) {
+  const ids = Object.keys(departments);
+  const steps = ROUTE_RULES.filter(r => ids.includes(r.dept) && r.rx.test(text)).map(r => r.dept);
+  if (steps.length === 0) {
+    if (ids.includes('research') && ids.includes('writing')) return ['research', 'writing'];
+    if (ids.includes('writing')) return ['writing'];
+    const byCategory = (cat) => ids.find(id => departments[id]?.category === cat);
+    const researchLike = byCategory('research') || byCategory('engineering') || ids.find(id => departments[id]?.role && /research|find|look|search/i.test(departments[id].description || ''));
+    const outputLike = byCategory('communication') || byCategory('scheduling') || byCategory('memory') || ids.find(id => departments[id]?.role);
+    const plan = [];
+    if (researchLike) plan.push(researchLike);
+    if (outputLike && outputLike !== researchLike) plan.push(outputLike);
+    return plan.length ? plan : ids.filter(id => id !== 'command' && id !== 'archive').slice(0, 1);
+  }
   return steps;
 }
 
@@ -111,28 +124,26 @@ const WORKABLE = ['research', 'math', 'engineering', 'writing', 'calendar', 'shi
 
 // Turn a planner's raw answer (string or array) into a valid pipeline,
 // or null if nothing usable survives validation.
-export function sanitizePlan(raw) {
+export function sanitizePlan(raw, allowedIds = WORKABLE) {
   let parts;
   if (Array.isArray(raw)) parts = raw;
   else if (typeof raw === 'string') parts = raw.toLowerCase().split(/[,\s→>|/]+/);
   else return null;
   const plan = [];
   for (const p of parts.map(s => String(s).trim().toLowerCase())) {
-    if (WORKABLE.includes(p) && !plan.includes(p)) plan.push(p);
+    if (allowedIds.includes(p) && !plan.includes(p)) plan.push(p);
   }
   return plan.length ? plan.slice(0, 4) : null;
 }
 
 // LLM-powered War Room: reads the mission and decides the pipeline.
-export function llmPlanner({ url = 'http://127.0.0.1:11434', model = 'gemma4:e2b', fetchFn } = {}) {
+export function llmPlanner({ url = 'http://127.0.0.1:11434', model = 'gemma4:e2b', fetchFn, departments = DEPARTMENTS } = {}) {
   const doFetch = fetchFn || fetch;
-  const system = 'You are the War Room of R2-D2’s rebel base of AI departments. Departments: '
-    + 'research (looks up facts and intel), math (calculations and estimates), engineering (writes code and builds apps), '
-    + 'writing (drafts and polishes text), calendar (scheduling and reminders), shield (redacts private details), '
-    + 'post (formats and sends messages out). '
-    + 'Given the General’s mission, reply with ONLY the department ids that should handle it, '
-    + 'comma-separated, in processing order. Use 1 to 3 departments. No other words.';
   return async (task) => {
+    const deptList = Object.values(departments)
+      .map(d => `- ${d.id}: ${d.description || d.name}`)
+      .join('\n');
+    const system = `You are the War Room of R2-D2's rebel base of AI departments. Available departments:\n${deptList}\n\nGiven the General's mission, reply with ONLY the department ids that should handle it, comma-separated, in processing order. Use 1 to 3 departments. No other words.`;
     const res = await doFetch(`${url}/api/generate`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -143,6 +154,9 @@ export function llmPlanner({ url = 'http://127.0.0.1:11434', model = 'gemma4:e2b
     return (data.response || '').trim();
   };
 }
+
+/** @deprecated Use llmPlanner directly; kept for backward compatibility. */
+export { aiPlanner } from './aiBuilder.js';
 
 // ---------------------------------------------------------- mock workers ---
 
@@ -192,7 +206,7 @@ export function llmWorkers({ url = 'http://127.0.0.1:11434', model = 'gemma4:e2b
     workers[d.id] = (task, input) =>
       call(d.role, input ? `Mission: ${task.text}\n\nInput from the previous department:\n${input}` : `Mission: ${task.text}`);
   }
-  workers.dispatch = llmPlanner({ url, model, fetchFn });
+  workers.dispatch = llmPlanner({ url, model, fetchFn, departments: DEPARTMENTS });
   return workers;
 }
 
@@ -200,7 +214,7 @@ export function llmWorkers({ url = 'http://127.0.0.1:11434', model = 'gemma4:e2b
 
 const VEHICLE_SPEED = 230; // px per simulated second
 
-export function createCity({ workers, chaos = false, failRate = 0.25, random = Math.random } = {}) {
+export function createCity({ workers, chaos = false, failRate = 0.25, random = Math.random, departments = DEPARTMENTS } = {}) {
   const city = {
     time: 0,
     nextId: 1,
@@ -212,10 +226,11 @@ export function createCity({ workers, chaos = false, failRate = 0.25, random = M
     chaos,            // when true, Imperial jamming randomly breaks bays mid-job
     failRate,
     random,
+    departments,      // building map used for layout + routing
     depts: {},        // id -> { queue: [], slots: [{ job|null }], broken }
     stats: { issued: 0, delivered: 0, breakdowns: 0 },
   };
-  for (const d of Object.values(DEPARTMENTS)) {
+  for (const d of Object.values(departments)) {
     city.depts[d.id] = { queue: [], slots: Array.from({ length: d.workers }, () => ({ job: null })), broken: false };
   }
   return city;
@@ -249,7 +264,7 @@ export function issueOrder(city, text) {
 }
 
 function spawnVehicle(city, task, fromDept, toDept, kind) {
-  const path = roadPath(fromDept, toDept);
+  const path = roadPath(fromDept, toDept, city.departments);
   city.vehicles.push({
     id: `${task ? task.id : 'x'}-${kind}-${city.vehicles.length}-${Math.floor(city.time * 10)}`,
     taskId: task ? task.id : null,
@@ -282,7 +297,7 @@ function positionAlong(path, dist) {
 function arrive(city, v) {
   const task = v.taskId != null ? city.tasks[v.taskId] : null;
   if (v.kind === 'order' || v.kind === 'handoff') {
-    const dept = DEPARTMENTS[v.to];
+    const dept = city.departments[v.to];
     city.depts[v.to].queue.push({ taskId: task.id, input: lastOutput(task) });
     task.location = v.to;
     task.status = `queued at ${dept.name}`;
@@ -298,7 +313,7 @@ function arrive(city, v) {
     task.archived = true;
     emit(city, `\u{1F5C4}\u{FE0F} Mission #${task.id} etched into the Memory Vault`);
   } else if (v.kind === 'repair') {
-    const dept = DEPARTMENTS[v.to];
+    const dept = city.departments[v.to];
     city.depts[v.to].broken = false;
     emit(city, `\u{1F527} ${dept.name} repaired — systems back online`);
   }
@@ -311,7 +326,7 @@ export function sendRepairCrew(city, deptId) {
   if (!state || !state.broken) return false;
   if (city.vehicles.some(v => v.kind === 'repair' && v.to === deptId)) return false;
   spawnVehicle(city, null, 'command', deptId, 'repair');
-  emit(city, `\u{1F6E0}\u{FE0F} Astromech crew dispatched to ${DEPARTMENTS[deptId].name}`);
+  emit(city, `\u{1F6E0}\u{FE0F} Astromech crew dispatched to ${city.departments[deptId].name}`);
   return true;
 }
 
@@ -322,7 +337,8 @@ function lastOutput(task) {
 function startJobs(city) {
   for (const [deptId, state] of Object.entries(city.depts)) {
     if (state.broken) continue; // no work while the bay is sparking
-    const meta = DEPARTMENTS[deptId];
+    const meta = city.departments[deptId];
+    if (!meta) continue;
     for (const slot of state.slots) {
       if (slot.job || state.queue.length === 0) continue;
       const item = state.queue.shift();
@@ -337,20 +353,21 @@ function startJobs(city) {
       if (deptId === 'dispatch') {
         const fn = city.workers.dispatch;
         if (!fn) {
-          job.output = planRoute(task.text);
+          job.output = planRoute(task.text, city.departments);
           job.planner = 'keywords';
           job.ready = true;
         } else {
           Promise.resolve()
             .then(() => fn(task))
             .then(raw => {
-              const plan = sanitizePlan(raw);
+              const allowedIds = Object.keys(city.departments);
+              const plan = sanitizePlan(raw, allowedIds);
               if (plan) { job.output = plan; job.planner = 'llm'; }
-              else { job.output = planRoute(task.text); job.planner = 'keyword fallback'; }
+              else { job.output = planRoute(task.text, city.departments); job.planner = 'keyword fallback'; }
               job.ready = true;
             })
             .catch(() => {
-              job.output = planRoute(task.text);
+              job.output = planRoute(task.text, city.departments);
               job.planner = 'keyword fallback';
               job.ready = true;
             });
@@ -368,7 +385,8 @@ function startJobs(city) {
 
 function finishJobs(city) {
   for (const [deptId, state] of Object.entries(city.depts)) {
-    const meta = DEPARTMENTS[deptId];
+    const meta = city.departments[deptId];
+    if (!meta) continue;
     for (const slot of state.slots) {
       const job = slot.job;
       if (!job || job.remaining > 0 || !job.ready) continue;
@@ -395,7 +413,7 @@ function finishJobs(city) {
       if (deptId === 'dispatch') {
         task.plan = job.output;
         task.step = 0;
-        emit(city, `\u{1F9ED} War Room planned mission #${task.id}: ${task.plan.map(p => DEPARTMENTS[p].name).join(' → ')}${job.planner === 'llm' ? ' \u{1F9E0}' : job.planner === 'keyword fallback' ? ' (keyword fallback)' : ''}`);
+        emit(city, `\u{1F9ED} War Room planned mission #${task.id}: ${task.plan.map(p => city.departments[p]?.name || p).join(' → ')}${job.planner === 'llm' ? ' \u{1F9E0}' : job.planner === 'keyword fallback' ? ' (keyword fallback)' : ''}`);
         task.status = 'in transit';
         spawnVehicle(city, task, 'dispatch', task.plan[0], 'handoff');
       } else {
