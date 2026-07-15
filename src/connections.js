@@ -129,6 +129,18 @@ export function getConnectionType(type) {
 }
 
 /**
+ * Test a connection by attempting to reach the external service.
+ * @param {string} type
+ * @param {Object} config
+ * @returns {Promise<{ok: boolean, message: string}>}
+ */
+export async function testConnection(type, config) {
+  const ct = CONNECTION_TYPES[type];
+  if (!ct) return { ok: false, message: `Unknown connection type "${type}".` };
+  return ct.testConnection(config);
+}
+
+/**
  * Validate a single connection config against its type.
  * @param {string} type
  * @param {Object} config
