@@ -10,11 +10,17 @@
 import http from 'node:http';
 import net from 'node:net';
 import { execFile } from 'node:child_process';
-import { open, readdir, readFile } from 'node:fs/promises';
+import { copyFile, open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+// city builder: departments.json stays the wire protocol; the user's city is
+// a skin merged over it (no-orphan guarantee lives in citySchema.mjs)
+import {
+  loadRegistry, loadCityConfig, loadAssets, mergeCity, validateCityConfig,
+  orphanDeptRefs, CITY_FILE,
+} from './src/citySchema.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PORT = Number(process.env.PORT || 8347);
@@ -290,8 +296,9 @@ async function tailCityEvents(maxEvents = 500, tailBytes = 393216) {
 
 async function collectCity() {
   const city = { at: Date.now() };
-  try { city.registry = JSON.parse(await readFile(DEPTS_FILE, 'utf8')); }
-  catch (err) { city.registryError = err.message; city.registry = { governor: { id: 'governor' }, departments: [] }; }
+  try { city.registry = mergeCity(loadRegistry(), loadCityConfig()); }
+  catch (err) { city.registryError = err.message; city.registry = { governor: { id: 'governor' }, departments: [], aliases: {} }; }
+  try { city.assets = loadAssets(); } catch { /* palette is optional */ }
   city.gateway = { up: await gatewayUp(), port: GATEWAY_PORT };
   city.events = await tailCityEvents();
   // live subagent/cron/task pulse reused by the city (cheap queries, day scope)
@@ -324,6 +331,195 @@ async function cityJSON() {
   if (Date.now() - cityCache.at < 2500 && cityCache.body) return cityCache.body;
   cityCache = { at: Date.now(), body: JSON.stringify(await collectCity()) };
   return cityCache.body;
+}
+
+// ------------------------------------------------------------ city builder ---
+// The server binds 0.0.0.0 behind `tailscale serve`, so every path that can
+// WRITE a city config is gated on a shared token the browser never receives
+// from us (the user pastes it once; it lives in city_builder/builder-token.txt).
+
+const BUILDER_TOKEN_FILE = join(OC, 'city_builder', 'builder-token.txt');
+const PLANNER_MODEL = process.env.R2D2_PLANNER_MODEL || 'gemma4:31b-cloud';
+
+async function builderAuthorized(req) {
+  let token;
+  try { token = (await readFile(BUILDER_TOKEN_FILE, 'utf8')).trim(); } catch { return false; }
+  return Boolean(token) && (req.headers['x-builder-token'] || '') === token;
+}
+
+async function readJsonBody(req, maxBytes = 256 * 1024) {
+  const chunks = [];
+  let len = 0;
+  for await (const c of req) {
+    len += c.length;
+    if (len > maxBytes) throw new Error('body too large');
+    chunks.push(c);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+// Full pre-save validation: structure AND the reality check (can this city
+// host every dept id the router has actually emitted?).
+async function vetCity(city) {
+  const registry = loadRegistry();
+  const v = validateCityConfig(city, registry);
+  if (!v.ok) return { ok: false, errors: v.errors };
+  const merged = mergeCity(registry, city);
+  const orphans = orphanDeptRefs(merged, await tailCityEvents(5000, 4 * 1024 * 1024));
+  if (orphans.size) {
+    return { ok: false, errors: [...orphans.keys()].map((id) => `emitted dept "${id}" would have no building`) };
+  }
+  return { ok: true, merged };
+}
+
+async function saveCity(city) {
+  const vet = await vetCity(city);
+  if (!vet.ok) return { ok: false, errors: vet.errors };
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+  try { await copyFile(CITY_FILE, `${CITY_FILE}.bak-${stamp}`); } catch { /* first save */ }
+  await writeFile(CITY_FILE, JSON.stringify(city, null, 2) + '\n');
+  cityCache = { at: 0, body: null };
+  return { ok: true, registry: vet.merged };
+}
+
+// --- AI city planner: gemma4 (Ollama cloud) drafts a city skin from a prompt.
+// The model only ever proposes; every draft passes the same vetCity() gate as
+// a hand-built city, and unknown capability refs are repaired, never trusted.
+
+function plannerSystemPrompt(registry, assets) {
+  const caps = (registry.departments || [])
+    .map((d) => `- ${d.id}: ${d.name} — ${d.role || ''}`).join('\n');
+  const prefabs = Object.entries(assets?.assets?.buildings || {})
+    .map(([k, p]) => `- ${k} (absorbs ${p.absorbs.join('+') || 'nothing'}): ${p.name}, icon ${p.icon}, color ${p.color}`)
+    .join('\n');
+  return `You are the city planner for Agentropolis, a sim-city dashboard where each building is a real AI department. Design a city as JSON.
+
+HARD RULES:
+- These 11 capability ids are fixed system plumbing. Every one of them must be absorbed by EXACTLY ONE building (a building may absorb several):
+${caps}
+- Output ONLY a JSON object, no prose, with this exact shape:
+{"cityName": string, "governor": {"name": string, "minister": string}, "departments": [{"id": lowercase_slug, "name": string, "minister": string, "icon": string, "color": "#rrggbb", "absorbs": [capability ids], "pos": {"gx": 0-23, "gy": 0-23}}], "decor": [{"kind": "tree"|"park"|"water"|"plaza", "gx": 0-23, "gy": 0-23}]}
+- 4 to 11 departments. Building ids are new slugs (not capability ids). Themed, fun names and ministers that match the user's request.
+- icon must be one of: clocktower, postoffice, archive, factory, observatory, shield, courthouse, library, depot, belltower, hangar, capitol.
+- pos: spread buildings on the 24x24 grid, keep gx+gy between 6 and 40, at least 3 tiles apart; the governor sits at the center (11,11) — do not place anything within 2 tiles of it. 6-20 decor items.
+
+Prefab inspiration (you may copy or invent better):
+${prefabs}`;
+}
+
+// coerce whatever the model returned into a shape validateCityConfig can judge
+function repairPlan(plan, registry) {
+  const caps = new Set((registry.departments || []).map((d) => d.id));
+  const capMeta = new Map((registry.departments || []).map((d) => [d.id, d]));
+  const out = { cityName: isNonEmpty(plan?.cityName) ? String(plan.cityName).slice(0, 80) : 'Agentropolis' };
+  if (plan?.governor && typeof plan.governor === 'object') {
+    out.governor = {
+      id: 'governor',
+      ...(isNonEmpty(plan.governor.name) ? { name: String(plan.governor.name).slice(0, 80) } : {}),
+      ...(isNonEmpty(plan.governor.minister) ? { minister: String(plan.governor.minister).slice(0, 80) } : {}),
+    };
+  }
+  const seen = new Set(['governor']);
+  const owned = new Set();
+  out.departments = [];
+  for (const b of Array.isArray(plan?.departments) ? plan.departments : []) {
+    if (!b || typeof b !== 'object') continue;
+    let id = String(b.id || b.name || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$|^(?=[0-9])/g, 'b');
+    id = id.slice(0, 40) || `bldg_${out.departments.length}`;
+    while (seen.has(id) || caps.has(id)) id = `${id.slice(0, 37)}_${out.departments.length}`;
+    seen.add(id);
+    const absorbs = [...new Set((Array.isArray(b.absorbs) ? b.absorbs : []).map(String))]
+      .filter((c) => caps.has(c) && !owned.has(c));
+    for (const c of absorbs) owned.add(c);
+    const first = capMeta.get(absorbs[0]);
+    const gx = Number(b.pos?.gx), gy = Number(b.pos?.gy);
+    out.departments.push({
+      id,
+      name: isNonEmpty(b.name) ? String(b.name).slice(0, 80) : (first?.name || id),
+      minister: isNonEmpty(b.minister) ? String(b.minister).slice(0, 80) : undefined,
+      icon: typeof b.icon === 'string' ? b.icon : first?.icon,
+      color: /^#[0-9a-fA-F]{6}$/.test(String(b.color)) ? b.color : first?.color,
+      absorbs,
+      ...(Number.isFinite(gx) && Number.isFinite(gy)
+        ? { pos: { gx: Math.max(0, Math.min(23, Math.round(gx))), gy: Math.max(0, Math.min(23, Math.round(gy))) } } : {}),
+    });
+  }
+  // drop decorative-only buildings the model invented with no capabilities
+  out.departments = out.departments.filter((b) => b.absorbs.length > 0);
+  // models ignore spacing rules: drop any proposed pos that collides with the
+  // capitol (3x3 at the grid center) or an earlier building — the UI's auto
+  // ring will place those instead
+  const placed = [{ gx: 10, gy: 10, f: 3 }];
+  for (const b of out.departments) {
+    if (!b.pos) continue;
+    const f = 2;
+    const clash = placed.some((p) =>
+      b.pos.gx < p.gx + p.f + 2 && b.pos.gx + f + 2 > p.gx &&
+      b.pos.gy < p.gy + p.f + 2 && b.pos.gy + f + 2 > p.gy);
+    if (clash) delete b.pos;
+    else placed.push({ ...b.pos, f });
+  }
+  out.decor = (Array.isArray(plan?.decor) ? plan.decor : []).slice(0, 60)
+    .map((t) => ({
+      kind: ['tree', 'park', 'water', 'plaza'].includes(t?.kind) ? t.kind : 'tree',
+      gx: Math.max(0, Math.min(23, Math.round(Number(t?.gx) || 0))),
+      gy: Math.max(0, Math.min(23, Math.round(Number(t?.gy) || 0))),
+    }));
+  return out;
+}
+const isNonEmpty = (s) => typeof s === 'string' && s.trim().length > 0;
+
+// The planner model lives on Ollama cloud. The local daemon only proxies
+// cloud models when signed in (it 401s here), so resolve the same provider
+// endpoint + key OpenClaw itself uses (openclaw.json models.providers) at
+// call time. The key stays in this process; it is never logged or served.
+async function resolveOllamaEndpoint() {
+  try {
+    const cfg = JSON.parse(await readFile(join(OC, 'openclaw.json'), 'utf8'));
+    const p = cfg?.models?.providers?.['ollama-cloud'];
+    if (p?.apiKey) {
+      const expand = (s) => String(s || '').replace(/\$\{(\w+)\}/g, (_, v) => process.env[v] || '');
+      const baseUrl = expand(p.baseUrl) || 'https://ollama.com';
+      const apiKey = expand(p.apiKey);
+      if (apiKey) return { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey };
+    }
+  } catch { /* fall through to the local daemon */ }
+  return { baseUrl: OLLAMA_URL, apiKey: null };
+}
+
+async function aiPlanCity(promptText) {
+  const registry = loadRegistry();
+  const assets = loadAssets();
+  const { baseUrl, apiKey } = await resolveOllamaEndpoint();
+  const res = await fetch(`${baseUrl}/api/chat`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
+    signal: AbortSignal.timeout(180000),
+    body: JSON.stringify({
+      model: PLANNER_MODEL,
+      stream: false,
+      format: 'json',
+      options: { temperature: 0.8 },
+      messages: [
+        { role: 'system', content: plannerSystemPrompt(registry, assets) },
+        { role: 'user', content: promptText },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`Ollama ${PLANNER_MODEL} returned ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  const raw = data?.message?.content || '';
+  let plan;
+  try { plan = JSON.parse(raw); }
+  catch {
+    const m = raw.match(/\{[\s\S]*\}/); // some models wrap the JSON in prose
+    if (!m) throw new Error(`planner did not return JSON: ${raw.slice(0, 200)}`);
+    plan = JSON.parse(m[0]);
+  }
+  const city = repairPlan(plan, registry);
+  const vet = await vetCity(city);
+  if (!vet.ok) throw new Error(`plan failed validation: ${vet.errors.join('; ')}`);
+  return { city, registry: vet.merged, model: PLANNER_MODEL };
 }
 
 // -------------------------------------------------------------- missions ---
@@ -392,6 +588,52 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       res.writeHead(500, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // builder writes/planning — token-gated (server is exposed on the tailnet)
+  if (url.pathname === '/api/city/check-token' && req.method === 'POST') {
+    const ok = await builderAuthorized(req);
+    res.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok }));
+    return;
+  }
+
+  if (url.pathname === '/api/city/save' && req.method === 'POST') {
+    if (!(await builderAuthorized(req))) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'bad or missing builder token (city_builder/builder-token.txt)' }));
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const result = await saveCity(body.city);
+      res.writeHead(result.ok ? 200 : 422, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, errors: [err.message] }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/city/ai-plan' && req.method === 'POST') {
+    if (!(await builderAuthorized(req))) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'bad or missing builder token (city_builder/builder-token.txt)' }));
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const text = String(body.prompt || '').trim();
+      if (!text || text.length > 1200) throw new Error('prompt must be 1-1200 characters');
+      const out = await aiPlanCity(text);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...out }));
+    } catch (err) {
+      res.writeHead(502, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message.slice(0, 500) }));
     }
     return;
   }

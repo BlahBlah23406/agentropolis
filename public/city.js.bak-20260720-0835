@@ -138,7 +138,6 @@ const state = {
   counters: { in: 0, out: 0, meet: 0 },
   trucks: [],             // data trucks driving the road network
   sparks: [],
-  droids: new Map(),   // building id -> [] small worker droids on the plaza
   bubbles: new Map(),
   openRoom: null,
   cabinetOpen: false,
@@ -682,39 +681,6 @@ function drawPrism(cx, baseY, wTiles, hPx, col, busy, rng) {
   }
 }
 
-
-function drawDroid(x, y, now, color, scale) {
-  const bob = Math.sin(now / 120 + x) * 1.2;
-  const s = scale;
-  // shadow
-  ctx.beginPath();
-  ctx.ellipse(x, y + 2.2 * s, 4 * s, 1.8 * s, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(3,6,12,.35)';
-  ctx.fill();
-  // body (rounded trapezoid / astromech barrel)
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(x - 3.2 * s, y - (8 + bob) * s, 6.4 * s, 7.5 * s, 2 * s);
-  ctx.fill();
-  // dome head
-  ctx.beginPath();
-  ctx.arc(x, y - (8.6 + bob) * s, 3.2 * s, Math.PI, 0);
-  ctx.fillStyle = shade(color, 1.25);
-  ctx.fill();
-  // eye slit
-  ctx.fillStyle = 'rgba(230,244,255,.9)';
-  ctx.fillRect(x - 1.6 * s, y - (9.2 + bob) * s, 3.2 * s, 1.1 * s);
-  // legs
-  ctx.strokeStyle = shade(color, 0.7);
-  ctx.lineWidth = 1.4 * s;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x - 2 * s, y - 2 * s);
-  ctx.lineTo(x - 2.8 * s, y + 2 * s);
-  ctx.moveTo(x + 2 * s, y - 2 * s);
-  ctx.lineTo(x + 2.8 * s, y + 2 * s);
-  ctx.stroke();
-}
 function drawBuilding(b, now, ghost) {
   const { x, gx, gy, f, d } = b;
   const id = d.id;
@@ -828,31 +794,13 @@ function drawBuilding(b, now, ghost) {
     ctx.fillText('annex — default building', base.x, baseY + hh + 28);
   }
 
-  // worker droids on the plaza (one per live worker up to 5)
-  const D = state.depts.get(id);
-  const liveCount = D ? liveWorkers(D) : 0;
-  if (liveCount > 0 && !ghost) {
-    let droids = state.droids.get(id);
-    if (!droids) { droids = []; state.droids.set(id, droids); }
-    // ensure enough stable droids
-    while (droids.length < liveCount && droids.length < 5) {
-      const seed = hash(String(id) + '-droid-' + droids.length)();
-      droids.push({
-        angle: seed * Math.PI * 2,
-        radius: 16 + seed * 18,
-        speed: 0.0005 + seed * 0.0006,
-        scale: 0.75 + seed * 0.35,
-        color: shade(col, 0.95 + seed * 0.35),
-      });
-    }
-    // trim if workers leave
-    if (droids.length > liveCount) state.droids.set(id, droids.slice(0, liveCount));
-    for (const dr of droids) {
-      const a = dr.angle + now * dr.speed;
-      const dx = Math.cos(a) * dr.radius;
-      const dy = Math.sin(a) * (dr.radius * 0.42);
-      drawDroid(base.x + dx, baseY + dy + 4, now, dr.color, dr.scale);
-    }
+  // worker LEDs by the door
+  const workers = state.depts.get(id)?.workers || 0;
+  for (let i = 0; i < Math.min(workers, 5); i++) {
+    ctx.beginPath();
+    ctx.arc(base.x - 12 + i * 7, baseY + hh - 4, 2.6, 0, Math.PI * 2);
+    ctx.fillStyle = '#56c8ff';
+    ctx.fill();
   }
 
   // io marquee on the capitol

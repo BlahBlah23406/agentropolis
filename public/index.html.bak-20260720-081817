@@ -365,47 +365,6 @@
     body.building #feed, body.building #bar { display: none; }
   }
   @media (prefers-reduced-motion: reduce) { .toast, #meetBanner.live { animation: none; transition: none; } }
-
-  /* building hover tooltip */
-  #tooltip {
-    position: fixed;
-    z-index: 9;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity .15s;
-    max-width: 280px;
-    background: rgba(13, 20, 36, .96);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--r-md);
-    padding: 10px 12px;
-    box-shadow: var(--shadow-pop);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
-    font-size: 12.5px;
-    color: #c6d6f2;
-    line-height: 1.45;
-  }
-  #tooltip.visible { opacity: 1; }
-  #tooltip .tt-head { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
-  #tooltip .tt-head .ic { color: var(--accent-2); flex: 0 0 auto; }
-  #tooltip .tt-name { font-weight: 800; color: var(--text); font-size: 14px; }
-  #tooltip .tt-minister { color: var(--muted); font-weight: 650; font-size: 12px; }
-  #tooltip .tt-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
-  #tooltip .tt-pill {
-    font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
-    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
-  }
-  #tooltip .tt-pill.working { border-color: rgba(70,214,140,.45); color: var(--ok); background: rgba(70,214,140,.1); }
-  #tooltip .tt-pill.idle { border-color: var(--line); color: var(--muted); background: rgba(120,160,255,.06); }
-  #tooltip .tt-snip {
-    margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line);
-    font-size: 11.5px; color: var(--muted); font-style: italic;
-  }
-  #tooltip .tt-snip b { color: #c6d6f2; font-style: normal; font-weight: 700; }
-  @media (max-width: 700px) {
-    #tooltip { max-width: 220px; font-size: 11.5px; padding: 8px 10px; }
-    #tooltip .tt-name { font-size: 12.5px; }
-  }
 </style>
 </head>
 <body>
@@ -508,12 +467,5 @@
 </div>
 
 <script type="module" src="city.js"></script>
-
-<div id="tooltip" aria-hidden="true">
-  <div class="tt-head"><span id="ttIcon"></span><span class="tt-name" id="ttName"></span></div>
-  <div class="tt-minister" id="ttMinister"></div>
-  <div class="tt-meta"><span class="tt-pill" id="ttStatus"></span><span class="tt-pill" id="ttWorkers"></span></div>
-  <div class="tt-snip" id="ttSnip"></div>
-</div>
 </body>
 </html>

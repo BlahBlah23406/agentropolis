@@ -6,7 +6,9 @@
   "main": "src/engine.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/engine.test.js"
+    "test": "node --test test/engine.test.js test/city.test.js test/schema.test.js",
+    "validate-city": "node src/validateCity.mjs",
+    "smoke": "node test/smoke.mjs"
   },
   "license": "MIT"
 }

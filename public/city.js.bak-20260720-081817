@@ -138,11 +138,9 @@ const state = {
   counters: { in: 0, out: 0, meet: 0 },
   trucks: [],             // data trucks driving the road network
   sparks: [],
-  droids: new Map(),   // building id -> [] small worker droids on the plaza
   bubbles: new Map(),
   openRoom: null,
   cabinetOpen: false,
-  hoverId: null,
   ioFlash: null,
   // builder
   mode: 'view',           // 'view' | 'build'
@@ -682,39 +680,6 @@ function drawPrism(cx, baseY, wTiles, hPx, col, busy, rng) {
   }
 }
 
-
-function drawDroid(x, y, now, color, scale) {
-  const bob = Math.sin(now / 120 + x) * 1.2;
-  const s = scale;
-  // shadow
-  ctx.beginPath();
-  ctx.ellipse(x, y + 2.2 * s, 4 * s, 1.8 * s, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(3,6,12,.35)';
-  ctx.fill();
-  // body (rounded trapezoid / astromech barrel)
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(x - 3.2 * s, y - (8 + bob) * s, 6.4 * s, 7.5 * s, 2 * s);
-  ctx.fill();
-  // dome head
-  ctx.beginPath();
-  ctx.arc(x, y - (8.6 + bob) * s, 3.2 * s, Math.PI, 0);
-  ctx.fillStyle = shade(color, 1.25);
-  ctx.fill();
-  // eye slit
-  ctx.fillStyle = 'rgba(230,244,255,.9)';
-  ctx.fillRect(x - 1.6 * s, y - (9.2 + bob) * s, 3.2 * s, 1.1 * s);
-  // legs
-  ctx.strokeStyle = shade(color, 0.7);
-  ctx.lineWidth = 1.4 * s;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x - 2 * s, y - 2 * s);
-  ctx.lineTo(x - 2.8 * s, y + 2 * s);
-  ctx.moveTo(x + 2 * s, y - 2 * s);
-  ctx.lineTo(x + 2.8 * s, y + 2 * s);
-  ctx.stroke();
-}
 function drawBuilding(b, now, ghost) {
   const { x, gx, gy, f, d } = b;
   const id = d.id;
@@ -828,31 +793,13 @@ function drawBuilding(b, now, ghost) {
     ctx.fillText('annex — default building', base.x, baseY + hh + 28);
   }
 
-  // worker droids on the plaza (one per live worker up to 5)
-  const D = state.depts.get(id);
-  const liveCount = D ? liveWorkers(D) : 0;
-  if (liveCount > 0 && !ghost) {
-    let droids = state.droids.get(id);
-    if (!droids) { droids = []; state.droids.set(id, droids); }
-    // ensure enough stable droids
-    while (droids.length < liveCount && droids.length < 5) {
-      const seed = hash(String(id) + '-droid-' + droids.length)();
-      droids.push({
-        angle: seed * Math.PI * 2,
-        radius: 16 + seed * 18,
-        speed: 0.0005 + seed * 0.0006,
-        scale: 0.75 + seed * 0.35,
-        color: shade(col, 0.95 + seed * 0.35),
-      });
-    }
-    // trim if workers leave
-    if (droids.length > liveCount) state.droids.set(id, droids.slice(0, liveCount));
-    for (const dr of droids) {
-      const a = dr.angle + now * dr.speed;
-      const dx = Math.cos(a) * dr.radius;
-      const dy = Math.sin(a) * (dr.radius * 0.42);
-      drawDroid(base.x + dx, baseY + dy + 4, now, dr.color, dr.scale);
-    }
+  // worker LEDs by the door
+  const workers = state.depts.get(id)?.workers || 0;
+  for (let i = 0; i < Math.min(workers, 5); i++) {
+    ctx.beginPath();
+    ctx.arc(base.x - 12 + i * 7, baseY + hh - 4, 2.6, 0, Math.PI * 2);
+    ctx.fillStyle = '#56c8ff';
+    ctx.fill();
   }
 
   // io marquee on the capitol
@@ -1051,7 +998,6 @@ function renderRoom(id) {
 }
 
 function openRoom(id) {
-  hideTooltip();
   state.openRoom = id;
   renderRoom(id);
   zoomTo(id);
@@ -1059,7 +1005,6 @@ function openRoom(id) {
 }
 function closeRoom() {
   if (!state.openRoom) return;
-  hideTooltip();
   state.openRoom = null;
   $('interior').classList.remove('open');
   zoomOut();
@@ -1155,7 +1100,6 @@ function renderCabinet() {
 $('cabSearch').addEventListener('input', renderCabinet);
 
 function openCabinet() {
-  hideTooltip();
   state.cabinetOpen = true;
   buildSeats();
   renderCabinet();
@@ -1164,7 +1108,6 @@ function openCabinet() {
 }
 function closeCabinet() {
   if (!state.cabinetOpen) return;
-  hideTooltip();
   state.cabinetOpen = false;
   $('cabinet').classList.remove('open');
   zoomOut();
@@ -1173,8 +1116,8 @@ $('cabClose').addEventListener('click', closeCabinet);
 $('cabinet').addEventListener('click', (e) => { if (e.target === $('cabinet')) closeCabinet(); });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (state.placing) { state.placing = null; renderPalette(); hideTooltip(); return; }
-    closeRoom(); closeCabinet(); hideTooltip();
+    if (state.placing) { state.placing = null; renderPalette(); return; }
+    closeRoom(); closeCabinet();
   }
 });
 
@@ -1251,7 +1194,6 @@ function refreshDraft() {
 
 function setMode(mode) {
   if (mode === state.mode) return;
-  hideTooltip();
   state.mode = mode;
   state.selected = null;
   state.placing = null;
@@ -1540,61 +1482,6 @@ function hitBuilding(clientX, clientY) {
   return null;
 }
 
-function hideTooltip() {
-  state.hoverId = null;
-  $('tooltip').classList.remove('visible');
-}
-
-function updateTooltip(clientX, clientY) {
-  // only in view mode, never when a modal or builder is open
-  if (state.mode !== 'view' || state.openRoom || state.cabinetOpen || state.placing) {
-    hideTooltip();
-    return;
-  }
-  const id = hitBuilding(clientX, clientY);
-  state.hoverId = id || null;
-  const el = $('tooltip');
-  if (!id) { el.classList.remove('visible'); return; }
-  const reg = regEntry(id) || { name: id };
-  const D = deptData(id);
-  const nw = liveWorkers(D);
-  const busy = D.lastAct > Date.now() - BUSY_MS;
-  $('ttIcon').innerHTML = icon(deptIconName(id), 16);
-  $('ttName').textContent = reg.name || id;
-  const who = reg.minister
-    ? `${reg.minister} · ${reg.ministerModel || 'agent'}`
-    : (id === 'governor' ? "R2-D2 · Chief of Staff" : 'Unstaffed annex');
-  $('ttMinister').textContent = who;
-  const st = $('ttStatus');
-  st.textContent = busy ? 'working' : 'idle';
-  st.className = `tt-pill ${busy ? 'working' : 'idle'}`;
-  $('ttWorkers').textContent = `${nw} on floor`;
-  const latest = D.thinking[0] || D.desk[0];
-  const snip = $('ttSnip');
-  if (latest) {
-    const kind = latest.type === 'thinking' ? 'thinking'
-      : latest.type === 'progress' ? 'checkpoint'
-      : latest.type === 'minister_report' ? 'report'
-      : latest.type === 'result' ? 'result'
-      : latest.type === 'action' ? 'desk action'
-      : latest.type;
-    const text = esc(latest.text || '').slice(0, 90);
-    snip.innerHTML = `<b>${kind}:</b> ${text}${String(latest.text || '').length > 90 ? '…' : ''}`;
-    snip.style.display = '';
-  } else {
-    snip.style.display = 'none';
-  }
-  // rough position; will be corrected by the next pointermove if needed
-  const rect = el.getBoundingClientRect();
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let left = clientX + 14, top = clientY + 14;
-  if (left + rect.width > vw) left = clientX - rect.width - 10;
-  if (top + rect.height > vh) top = clientY - rect.height - 10;
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
-  el.classList.add('visible');
-}
-
 canvas.addEventListener('pointerdown', (ev) => {
   if (state.openRoom || state.cabinetOpen) return;
   canvas.setPointerCapture(ev.pointerId);
@@ -1624,10 +1511,6 @@ canvas.addEventListener('pointermove', (ev) => {
   if (state.mode === 'build') {
     const wpt = toWorld(ev.clientX, ev.clientY);
     state.hoverTile = tileAt(wpt.x, wpt.y);
-  }
-  // hover tooltip in view mode (no active gesture)
-  if (state.mode === 'view' && pointers.size === 0 && !state.openRoom && !state.cabinetOpen) {
-    updateTooltip(ev.clientX, ev.clientY);
   }
   const p = pointers.get(ev.pointerId);
   if (!p) return;
@@ -1700,7 +1583,6 @@ function endPointer(ev) {
 }
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', (ev) => { pointers.delete(ev.pointerId); pinchD0 = 0; gestureMoved = 99; state.dragging = null; });
-canvas.addEventListener('pointerleave', hideTooltip);
 
 canvas.addEventListener('wheel', (ev) => {
   ev.preventDefault();

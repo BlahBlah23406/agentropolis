@@ -1,0 +1,64 @@
+// Boots the REAL server on a scratch port and asks the question that
+// matters: does /api/city serve a registry whose buildings can host every
+// dept id the router has actually emitted? Exits 1 on any failure.
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
+
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const PORT = 8348;
+
+const srv = spawn(process.execPath, [join(ROOT, 'server.js')], {
+  env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1' },
+  stdio: 'ignore',
+  windowsHide: true,
+});
+
+const fail = (msg) => { console.error(`SMOKE FAIL: ${msg}`); srv.kill(); process.exit(1); };
+
+try {
+  let up = false;
+  for (let i = 0; i < 25 && !up; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    try { up = (await fetch(`http://127.0.0.1:${PORT}/`, { signal: AbortSignal.timeout(900) })).ok; } catch { /* booting */ }
+  }
+  if (!up) fail('server did not answer / within 5s');
+
+  const city = await (await fetch(`http://127.0.0.1:${PORT}/api/city`)).json();
+  const reg = city.registry;
+  if (!reg || !Array.isArray(reg.departments)) fail('/api/city has no registry.departments');
+  if (!reg.aliases || !reg.aliases.governor) fail('registry has no aliases map');
+
+  const hosts = new Set(reg.departments.map((b) => b.id));
+  hosts.add('governor');
+  let refs = 0;
+  for (const e of city.events || []) {
+    for (const r of [e.dept, e.to, e.from]) {
+      if (!r || typeof r !== 'string') continue;
+      refs++;
+      const b = reg.aliases[r] || r;
+      if (!hosts.has(b)) fail(`event dept "${r}" resolves to "${b}" which is not a building`);
+    }
+  }
+
+  const save = await fetch(`http://127.0.0.1:${PORT}/api/city/save`, { method: 'POST', body: '{}' });
+  if (save.status !== 401) fail(`unauthenticated save returned ${save.status}, expected 401`);
+  const plan = await fetch(`http://127.0.0.1:${PORT}/api/city/ai-plan`, { method: 'POST', body: '{}' });
+  if (plan.status !== 401) fail(`unauthenticated ai-plan returned ${plan.status}, expected 401`);
+
+  const html = await (await fetch(`http://127.0.0.1:${PORT}/`)).text();
+  for (const must of ['modeBuild', 'city.js', 'aiPrompt']) {
+    if (!html.includes(must)) fail(`index.html is missing "${must}"`);
+  }
+
+  console.log(`SMOKE OK: ${reg.departments.length} buildings host all ${refs} event dept refs; write paths are token-gated`);
+  // Graceful shutdown: close the HTTP server first, then terminate the child.
+  // Killing the child immediately on Windows can trip a libuv async handle
+  // assertion as the server tries to clean up outstanding handles.
+  await new Promise((r) => setTimeout(r, 300));
+  srv.kill();
+  await new Promise((r) => srv.once('exit', r));
+  process.exit(0);
+} catch (err) {
+  fail(err.message);
+}
