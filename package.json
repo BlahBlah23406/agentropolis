@@ -9,7 +9,9 @@
     "test": "node --test",
     "test:engine": "node --test test/engine.test.js",
     "test:builder": "node --test test/citybuilder.test.js test/aiBuilder.test.js",
-    "demo": "node demo-city.mjs"
+    "demo": "node demo-city.mjs",
+    "validate-city": "node src/validateCity.mjs",
+    "smoke": "node test/smoke.mjs"
   },
   "license": "MIT"
 }

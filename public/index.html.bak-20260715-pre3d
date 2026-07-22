@@ -275,169 +275,13 @@
     #cabThoughts { margin: 4px 10px 10px; }
     #cabSearch { width: 100%; min-width: auto; margin-top: 4px; }
   }
-  /* ── build mode ────────────────────────────────────────────────────────── */
-  #modeSwitch { position: fixed; z-index: 6; top: 14px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
-    padding: 4px; box-shadow: var(--shadow); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
-  #modeSwitch button { display: flex; align-items: center; gap: 7px; border: 0; background: transparent;
-    color: var(--muted); font: inherit; font-weight: 800; font-size: 12.5px; letter-spacing: .04em;
-    padding: 7px 16px; border-radius: 999px; cursor: pointer; }
-  #modeSwitch button.on { background: linear-gradient(180deg, rgba(86,200,255,.22), rgba(79,142,247,.16));
-    color: var(--text); box-shadow: 0 0 0 1px var(--line-strong) inset; }
-  #modeSwitch #modeBuild.on { background: linear-gradient(180deg, rgba(245,197,66,.26), rgba(224,169,46,.14)); color: #ffe9ad; }
-
-  #builder { position: fixed; z-index: 6; top: 62px; right: 14px; width: min(330px, calc(100vw - 28px));
-    max-height: calc(100vh - 160px); display: none; flex-direction: column; gap: 10px;
-    background: var(--panel); border: 1px solid rgba(245,197,66,.3); border-radius: var(--r-lg);
-    box-shadow: var(--shadow-pop); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
-    padding: 12px; overflow-y: auto; }
-  body.building #builder { display: flex; }
-  body.building #gwpill, body.building #stats { display: none; }
-  #builder h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: #ffe9ad;
-    font-weight: 800; display: flex; align-items: center; gap: 7px; }
-  #builder .hint { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
-  #cityNameInput { width: 100%; background: rgba(7,11,20,.6); border: 1px solid var(--line-strong);
-    border-radius: var(--r-md); padding: 8px 12px; color: var(--text); font: inherit; font-weight: 700; }
-  #cityNameInput:focus { outline: none; border-color: var(--gold); }
-  #aiBox { display: flex; flex-direction: column; gap: 7px; padding: 10px; border-radius: var(--r-md);
-    border: 1px solid rgba(181,142,247,.35); background: rgba(181,142,247,.07); }
-  #aiPrompt { width: 100%; min-height: 54px; resize: vertical; background: rgba(7,11,20,.6);
-    border: 1px solid var(--line-strong); border-radius: var(--r-md); padding: 8px 12px; color: var(--text);
-    font: inherit; font-size: 13px; }
-  #aiPrompt::placeholder { color: #5d729c; }
-  #aiPrompt:focus { outline: none; border-color: #b58ef7; }
-  #aiGo { display: flex; align-items: center; justify-content: center; gap: 7px;
-    background: linear-gradient(180deg, #c9a7ff, #9a6ef0); color: #1b1030; border: 0; border-radius: var(--r-md);
-    padding: 9px 14px; font-weight: 800; font-size: 13px; cursor: pointer; }
-  #aiGo:disabled { filter: grayscale(.6); cursor: wait; }
-  #palette { display: flex; flex-direction: column; gap: 5px; }
-  .pitem { display: flex; align-items: center; gap: 9px; text-align: left; border: 1px solid var(--line);
-    background: rgba(7,11,20,.4); border-radius: var(--r-md); padding: 7px 10px; color: var(--text);
-    font: inherit; cursor: pointer; }
-  .pitem:hover { border-color: var(--line-strong); }
-  .pitem.on { border-color: var(--gold); background: rgba(245,197,66,.1); box-shadow: 0 0 0 1px rgba(245,197,66,.4); }
-  .pitem .sw { width: 12px; height: 12px; border-radius: 4px; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(9,14,24,.6) inset; }
-  .pitem .pi { color: var(--accent-2); flex: 0 0 auto; }
-  .pitem .pn { font-size: 12.5px; font-weight: 700; line-height: 1.25; min-width: 0; }
-  .pitem .pn small { display: block; color: var(--muted); font-weight: 600; font-size: 10.5px; }
-  #builderBtns { display: flex; gap: 8px; }
-  #saveCity { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
-    background: linear-gradient(180deg, #ffd75e, #e0a92e); color: #241a02; border: 0; border-radius: var(--r-md);
-    padding: 10px 14px; font-weight: 800; font-size: 13.5px; cursor: pointer; }
-  #saveCity:disabled { filter: grayscale(.75); cursor: default; }
-  #revertCity { display: flex; align-items: center; gap: 6px; background: rgba(120,160,255,.08);
-    border: 1px solid var(--line); border-radius: var(--r-md); color: var(--muted); font: inherit;
-    font-weight: 700; font-size: 12.5px; padding: 10px 12px; cursor: pointer; }
-  #inspector { position: fixed; z-index: 7; left: 14px; bottom: 76px; width: min(320px, calc(100vw - 28px));
-    display: none; flex-direction: column; gap: 9px; background: var(--panel-2); border: 1px solid var(--line-strong);
-    border-radius: var(--r-lg); box-shadow: var(--shadow-pop); padding: 12px;
-    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); max-height: 56vh; overflow-y: auto; }
-  #inspector.open { display: flex; }
-  #inspector .ihead { display: flex; align-items: center; gap: 8px; }
-  #inspector .ihead .ic { color: var(--accent-2); flex: 0 0 auto; }
-  #inspector .ihead input { flex: 1; min-width: 0; background: rgba(7,11,20,.6); border: 1px solid var(--line-strong);
-    border-radius: 10px; padding: 7px 10px; color: var(--text); font: inherit; font-weight: 800; }
-  #inspector .ihead button { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 999px;
-    background: rgba(120,160,255,.08); color: var(--text); cursor: pointer; font-size: 12px; flex: 0 0 auto; }
-  #inspector .inote { font-size: 11.5px; color: var(--muted); background: rgba(120,160,255,.07);
-    border: 1px dashed var(--line-strong); border-radius: 10px; padding: 8px 10px; line-height: 1.45; }
-  #inspector .ilbl { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 800;
-    text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-  #inspector .ilbl input, #inspector .ilbl select { background: rgba(7,11,20,.6); border: 1px solid var(--line);
-    border-radius: 8px; padding: 6px 9px; color: var(--text); font: inherit; font-size: 13px; font-weight: 600; }
-  #inspector .ilbl input[type=color] { padding: 2px; height: 32px; cursor: pointer; }
-  .capgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 3px; }
-  .capgrid .cap { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700;
-    text-transform: none; letter-spacing: 0; color: var(--text); background: rgba(7,11,20,.4);
-    border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; cursor: pointer; }
-  .capgrid .cap.on { border-color: rgba(70,214,140,.5); background: rgba(70,214,140,.1); }
-  .capgrid .cap small { color: #5d729c; font-weight: 600; }
-  #inspector .danger { display: flex; align-items: center; justify-content: center; gap: 7px;
-    background: rgba(229,72,77,.12); border: 1px solid rgba(229,72,77,.4); color: #ff9196;
-    border-radius: var(--r-md); padding: 8px 12px; font: inherit; font-weight: 800; font-size: 12.5px; cursor: pointer; }
-
-  @media (max-width: 700px) {
-    #modeSwitch { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 64px); }
-    #modeSwitch button { padding: 6px 12px; font-size: 11.5px; }
-    #builder { top: calc(env(safe-area-inset-top, 0px) + 50px); right: 8px;
-      width: min(280px, calc(100vw - 16px)); max-height: 52dvh; }
-    #inspector { bottom: calc(env(safe-area-inset-bottom, 0px) + 118px); }
-    body.building #feed, body.building #bar { display: none; }
-  }
   @media (prefers-reduced-motion: reduce) { .toast, #meetBanner.live { animation: none; transition: none; } }
-
-  /* building hover tooltip */
-  #tooltip {
-    position: fixed;
-    z-index: 9;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity .15s;
-    max-width: 280px;
-    background: rgba(13, 20, 36, .96);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--r-md);
-    padding: 10px 12px;
-    box-shadow: var(--shadow-pop);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
-    font-size: 12.5px;
-    color: #c6d6f2;
-    line-height: 1.45;
-  }
-  #tooltip.visible { opacity: 1; }
-  #tooltip .tt-head { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
-  #tooltip .tt-head .ic { color: var(--accent-2); flex: 0 0 auto; }
-  #tooltip .tt-name { font-weight: 800; color: var(--text); font-size: 14px; }
-  #tooltip .tt-minister { color: var(--muted); font-weight: 650; font-size: 12px; }
-  #tooltip .tt-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
-  #tooltip .tt-pill {
-    font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
-    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
-  }
-  #tooltip .tt-pill.working { border-color: rgba(70,214,140,.45); color: var(--ok); background: rgba(70,214,140,.1); }
-  #tooltip .tt-pill.idle { border-color: var(--line); color: var(--muted); background: rgba(120,160,255,.06); }
-  #tooltip .tt-snip {
-    margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line);
-    font-size: 11.5px; color: var(--muted); font-style: italic;
-  }
-  #tooltip .tt-snip b { color: #c6d6f2; font-style: normal; font-weight: 700; }
-  @media (max-width: 700px) {
-    #tooltip { max-width: 220px; font-size: 11.5px; padding: 8px 10px; }
-    #tooltip .tt-name { font-size: 12.5px; }
-  }
 </style>
 </head>
 <body>
 <div id="wrap"><canvas id="city" width="1280" height="690"></canvas></div>
 
-<div id="title" class="pill"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 22h18M5 18v-7M9.5 18v-7M14.5 18v-7M19 18v-7M12 2l9 6H3l9-6z"/></svg> <span id="cityName">Agentropolis</span> <small>the OpenClaw government, live</small></div>
-
-<div id="modeSwitch" role="tablist" aria-label="City mode">
-  <button id="modeView" class="on" role="tab"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg> Live city</button>
-  <button id="modeBuild" role="tab"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 12l-8.5 8.5a2.12 2.12 0 0 1-3-3L12 9M17.64 15 22 10.64M20.91 11.7l-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.26 1.91"/></svg> Build</button>
-</div>
-
-<!-- build-mode side panel -->
-<div id="builder" aria-label="City builder">
-  <h3><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 12l-8.5 8.5a2.12 2.12 0 0 1-3-3L12 9M17.64 15 22 10.64M20.91 11.7l-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.26 1.91"/></svg> City builder</h3>
-  <input id="cityNameInput" maxlength="80" placeholder="City name…" aria-label="City name">
-  <div id="aiBox">
-    <h3 style="color:#d7c2ff"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.7L19 10l-5.1 1.6L12 17l-1.9-5.4L5 10l5.1-1.3L12 3zM19 17l.9 2.6L22 20l-2.1.7L19 23l-.9-2.3L16 20l2.1-.4L19 17zM5 15l.7 2L8 17.7l-2.3.8L5 21l-.7-2.5L2 17.7 4.3 17 5 15z"/></svg> AI city planner · gemma4</h3>
-    <textarea id="aiPrompt" placeholder="Describe your dream city… e.g. “a neon cyberpunk metropolis” or “a medieval kingdom with guild halls”" aria-label="AI city prompt"></textarea>
-    <button id="aiGo"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.7L19 10l-5.1 1.6L12 17l-1.9-5.4L5 10l5.1-1.3L12 3zM19 17l.9 2.6L22 20l-2.1.7L19 23l-.9-2.3L16 20l2.1-.4L19 17zM5 15l.7 2L8 17.7l-2.3.8L5 21l-.7-2.5L2 17.7 4.3 17 5 15z"/></svg> Draft my city</button>
-  </div>
-  <h3>Prefabs — tap one, then tap the map</h3>
-  <div class="hint">Each building HOSTS system capabilities (the real plumbing). Placing a prefab takes its capabilities over; anything unhosted keeps a default “annex” building, so nothing ever breaks.</div>
-  <div id="palette"></div>
-  <div id="builderBtns">
-    <button id="saveCity" disabled><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"/></svg> Save city</button>
-    <button id="revertCity" title="Reload the last saved city"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13"/></svg> Revert</button>
-  </div>
-</div>
-
-<!-- build-mode building inspector -->
-<div id="inspector" aria-label="Building inspector"></div>
+<div id="title" class="pill"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 22h18M5 18v-7M9.5 18v-7M14.5 18v-7M19 18v-7M12 2l9 6H3l9-6z"/></svg> Agentropolis <small>the OpenClaw government, live</small></div>
 <div id="stats" class="pill" aria-live="off">
   <span><span class="lbl">orders in</span><b id="statIn">0</b></span>
   <span><span class="lbl">results out</span><b id="statOut">0</b></span>
@@ -508,12 +352,5 @@
 </div>
 
 <script type="module" src="city.js"></script>
-
-<div id="tooltip" aria-hidden="true">
-  <div class="tt-head"><span id="ttIcon"></span><span class="tt-name" id="ttName"></span></div>
-  <div class="tt-minister" id="ttMinister"></div>
-  <div class="tt-meta"><span class="tt-pill" id="ttStatus"></span><span class="tt-pill" id="ttWorkers"></span></div>
-  <div class="tt-snip" id="ttSnip"></div>
-</div>
 </body>
 </html>
