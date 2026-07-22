@@ -21,6 +21,10 @@ import {
   loadRegistry, loadCityConfig, loadAssets, mergeCity, validateCityConfig,
   orphanDeptRefs, CITY_FILE,
 } from './src/citySchema.mjs';
+import {
+  createJoinCode, listJoinCodes, validateAndUseJoinCode, createGuestSession,
+  getGuestSession, getUserEvents, getUserMessages, runGuestMission,
+} from './src/multiuser.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PORT = Number(process.env.PORT || 8347);
@@ -532,19 +536,22 @@ const OPENCLAW_CLI = join(homedir(), 'AppData', 'Roaming', 'npm', 'node_modules'
 const DISCORD_TARGET = process.env.R2D2_DISCORD_TO || 'user:564209070882684939';
 let missionsInFlight = 0;
 
-function runMission(text) {
+function runMission(text, { sessionKey, replyToDiscord = true } = {}) {
+  if (process.env.TEST_MOCK_MISSION === '1') {
+    return Promise.resolve({ ok: true, deliveredTo: replyToDiscord ? `discord ${DISCORD_TARGET}` : 'browser', reply: `Mock agent reply to: ${text}` });
+  }
   return new Promise((resolve) => {
+    const key = sessionKey || `agent:main:agentropolis-web-${Date.now()}`;
     const args = [
       OPENCLAW_CLI, 'agent',
       '--agent', 'main',
-      // one session per mission: a privacy lock on one mission must never
-      // leak onto every later web-console order (that stall ate a real task
-      // on 2026-07-10 when the shared key was left privacy-locked)
-      '--session-key', `agent:main:agentropolis-web-${Date.now()}`,
+      '--session-key', key,
       '--message', `[Mission from the Agentropolis web console] ${text}`,
-      '--deliver', '--reply-channel', 'discord', '--reply-to', DISCORD_TARGET,
-      '--json', '--timeout', '540',
     ];
+    if (replyToDiscord) {
+      args.push('--deliver', '--reply-channel', 'discord', '--reply-to', DISCORD_TARGET);
+    }
+    args.push('--json', '--timeout', '540');
     execFile(NODE_EXE, args, {
       env: { ...process.env, HOME: homedir() },
       timeout: 560000,
@@ -569,16 +576,161 @@ function runMission(text) {
       if (err && !reply) {
         resolve({ ok: false, error: (String(stderr || '').trim() || err.message).slice(0, 500) });
       } else {
-        resolve({ ok: true, deliveredTo: `discord ${DISCORD_TARGET}`, reply: reply || raw.trim().slice(0, 4000) });
+        resolve({ ok: true, deliveredTo: replyToDiscord ? `discord ${DISCORD_TARGET}` : 'browser', reply: reply || raw.trim().slice(0, 4000) });
       }
     });
   });
+}
+
+function extractGuestToken(req, url) {
+  const auth = req.headers['authorization'] || '';
+  if (auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  if (req.headers['x-guest-token']) return req.headers['x-guest-token'];
+  if (url.searchParams.get('token')) return url.searchParams.get('token');
+  return null;
 }
 
 // ------------------------------------------------------------------ server ---
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
+
+  // Multi-user authentication & join codes
+  if (url.pathname === '/api/owner/join-code' && req.method === 'POST') {
+    try {
+      let body = {};
+      try { body = await readJsonBody(req); } catch { /* default params */ }
+      const ttlHours = Number(body.ttlHours) || 24;
+      const maxUses = Number(body.maxUses) || 1;
+      const codeEntry = createJoinCode({ ttlMs: ttlHours * 3600 * 1000, maxUses });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...codeEntry }));
+    } catch (err) {
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/owner/join-codes' && req.method === 'GET') {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, codes: listJoinCodes() }));
+    return;
+  }
+
+  if (url.pathname === '/api/join' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const val = validateAndUseJoinCode(body.joinCode);
+      if (!val.ok) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: val.error }));
+        return;
+      }
+      const session = createGuestSession(body.displayName);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        token: session.token,
+        user: { userId: session.userId, displayName: session.displayName },
+      }));
+    } catch (err) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/user/me' && req.method === 'GET') {
+    const token = extractGuestToken(req, url);
+    const session = getGuestSession(token);
+    if (!session) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Unauthorized guest token' }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({
+      ok: true,
+      user: { userId: session.userId, displayName: session.displayName },
+    }));
+    return;
+  }
+
+  if (url.pathname === '/api/user/city' && req.method === 'GET') {
+    const token = extractGuestToken(req, url);
+    const session = getGuestSession(token);
+    if (!session) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Unauthorized guest token' }));
+      return;
+    }
+    try {
+      const city = { at: Date.now() };
+      try { city.registry = mergeCity(loadRegistry(), loadCityConfig()); }
+      catch (err) { city.registryError = err.message; city.registry = { governor: { id: 'governor' }, departments: [], aliases: {} }; }
+      try { city.assets = loadAssets(); } catch { /* palette is optional */ }
+      city.gateway = { up: await gatewayUp(), port: GATEWAY_PORT };
+      city.events = getUserEvents(session.userId);
+      city.isGuest = true;
+      city.user = { userId: session.userId, displayName: session.displayName };
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(city));
+    } catch (err) {
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/user/mission' && req.method === 'POST') {
+    const token = extractGuestToken(req, url);
+    const session = getGuestSession(token);
+    if (!session) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Unauthorized guest token' }));
+      return;
+    }
+    let body = {};
+    try { body = await readJsonBody(req); } catch { /* handled below */ }
+    const text = String(body.text || '').trim();
+    if (!text || text.length > 2000) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'mission text must be 1-2000 characters' }));
+      return;
+    }
+    if (missionsInFlight >= 2) {
+      res.writeHead(429, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'too many missions in flight — try again shortly' }));
+      return;
+    }
+    missionsInFlight++;
+    try {
+      const result = await runGuestMission({
+        session,
+        text,
+        runMissionFn: (opts) => runMission(opts.text, { sessionKey: opts.sessionKey, replyToDiscord: false }),
+      });
+      res.writeHead(result.ok ? 200 : 502, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } finally {
+      missionsInFlight--;
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/user/messages' && req.method === 'GET') {
+    const token = extractGuestToken(req, url);
+    const session = getGuestSession(token);
+    if (!session) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Unauthorized guest token' }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, messages: getUserMessages(session.userId) }));
+    return;
+  }
 
   if (url.pathname === '/api/city') {
     try {

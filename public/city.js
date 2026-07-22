@@ -154,6 +154,10 @@ const state = {
   dragging: null,         // { id, dx, dy } moving a building
   dirty: false,
   aiBusy: false,
+  // multiuser guest mode
+  isGuest: false,
+  guestToken: null,
+  guestUser: null,
 };
 
 const MEETING_STALE_MS = 30 * 60 * 1000;
@@ -518,13 +522,21 @@ function spark(p, color) {
 let firstPoll = true;
 async function poll() {
   try {
-    const res = await fetch('/api/city', { cache: 'no-store' });
+    const endpoint = state.isGuest ? '/api/user/city' : '/api/city';
+    const headers = state.isGuest && state.guestToken ? { 'Authorization': `Bearer ${state.guestToken}` } : {};
+    const res = await fetch(endpoint, { cache: 'no-store', headers });
+    if (res.status === 401 && state.isGuest) {
+      logoutGuest();
+      return;
+    }
     const city = await res.json();
     if (city.registry && city.registry.departments) {
       state.registry = city.registry;
       if (city.assets) state.assets = city.assets;
       if (state.mode === 'view') layoutCity();
-      $('cityName').textContent = state.registry.cityName || 'Agentropolis';
+      $('cityName').textContent = state.isGuest
+        ? `Agentropolis (${state.guestUser?.displayName || 'Guest'})`
+        : (state.registry.cityName || 'Agentropolis');
     }
     state.gateway = city.gateway;
     state.subagents = city.subagents || [];
@@ -1709,6 +1721,80 @@ canvas.addEventListener('wheel', (ev) => {
 
 $('recenter').addEventListener('click', zoomOut);
 
+const GUEST_TOKEN_KEY = 'agentropolis_guest_token';
+const GUEST_USER_KEY = 'agentropolis_guest_user';
+
+function setGuestSession(token, user) {
+  state.isGuest = true;
+  state.guestToken = token;
+  state.guestUser = user;
+  localStorage.setItem(GUEST_TOKEN_KEY, token);
+  localStorage.setItem(GUEST_USER_KEY, JSON.stringify(user));
+  const exitBtn = $('exitGuestBtn');
+  if (exitBtn) exitBtn.style.display = 'inline-flex';
+  const genBtn = $('genJoinCodeBtn');
+  if (genBtn) genBtn.style.display = 'none';
+  const sub = $('titleSub');
+  if (sub) sub.textContent = `${user.displayName}'s private agent session`;
+  const orderText = $('orderText');
+  if (orderText) orderText.placeholder = `Order to ${user.displayName}'s agent...`;
+  const modal = $('joinModal');
+  if (modal) modal.style.display = 'none';
+  firstPoll = true;
+  state.lastTs = 0;
+  feedList.innerHTML = '';
+}
+
+function logoutGuest() {
+  state.isGuest = false;
+  state.guestToken = null;
+  state.guestUser = null;
+  localStorage.removeItem(GUEST_TOKEN_KEY);
+  localStorage.removeItem(GUEST_USER_KEY);
+  const exitBtn = $('exitGuestBtn');
+  if (exitBtn) exitBtn.style.display = 'none';
+  const genBtn = $('genJoinCodeBtn');
+  if (genBtn) genBtn.style.display = 'inline-flex';
+  const sub = $('titleSub');
+  if (sub) sub.textContent = 'the OpenClaw government, live';
+  const orderText = $('orderText');
+  if (orderText) orderText.placeholder = "Governor's order to R2-D2… (runs a real agent turn; the reply also lands in Discord)";
+  firstPoll = true;
+  state.lastTs = 0;
+  feedList.innerHTML = '';
+}
+
+async function initMultiuser() {
+  const params = new URLSearchParams(location.search);
+  const forceOwner = params.get('owner') === '1' || location.pathname === '/owner';
+  const forceJoin = params.get('join') === '1' || location.pathname === '/join';
+
+  if (forceOwner) {
+    logoutGuest();
+    return;
+  }
+
+  const savedToken = localStorage.getItem(GUEST_TOKEN_KEY);
+  if (savedToken) {
+    try {
+      const res = await fetch('/api/user/me', {
+        headers: { 'Authorization': `Bearer ${savedToken}` },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setGuestSession(savedToken, data.user);
+        return;
+      }
+    } catch { /* network error or invalid token */ }
+    logoutGuest();
+  }
+
+  if (forceJoin) {
+    const modal = $('joinModal');
+    if (modal) modal.style.display = 'flex';
+  }
+}
+
 // -------------------------------------------------------------------- order --
 $('orderForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1716,17 +1802,22 @@ $('orderForm').addEventListener('submit', async (e) => {
   if (!text) return;
   $('orderText').value = '';
   ioFlash('incoming');
-  toast('inbox', 'Order filed with R2-D2 — the reply will also reach Discord.');
+  toast('inbox', state.isGuest ? 'Order sent to your personal agent session.' : 'Order filed with R2-D2 — the reply will also reach Discord.');
   try {
-    const res = await fetch('/api/mission', {
+    const endpoint = state.isGuest ? '/api/user/mission' : '/api/mission';
+    const headers = { 'content-type': 'application/json' };
+    if (state.isGuest && state.guestToken) {
+      headers['Authorization'] = `Bearer ${state.guestToken}`;
+    }
+    const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify({ text }),
     });
     const out = await res.json();
     if (out.ok) {
       ioFlash('outgoing');
-      toast('send', `R2-D2 replies: ${String(out.reply || '').slice(0, 140)}`);
+      toast('send', `${state.isGuest ? 'Agent' : 'R2-D2'} replies: ${String(out.reply || '').slice(0, 140)}`);
     } else {
       toast('alert', `Order failed: ${out.error || 'unknown error'}`, true);
     }
@@ -1735,7 +1826,84 @@ $('orderForm').addEventListener('submit', async (e) => {
   }
 });
 
+// Join Form listener
+$('joinForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const joinCode = $('joinCodeInput').value.trim();
+  const displayName = $('joinNameInput').value.trim();
+  const errEl = $('joinError');
+  if (errEl) errEl.style.display = 'none';
+  try {
+    const res = await fetch('/api/join', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ joinCode, displayName }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setGuestSession(data.token, data.user);
+      toast('userplus', `Welcome to Agentropolis, ${data.user.displayName}!`);
+    } else {
+      if (errEl) {
+        errEl.textContent = data.error || 'Failed to join';
+        errEl.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    if (errEl) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    }
+  }
+});
+
+$('skipJoinBtn')?.addEventListener('click', () => {
+  const modal = $('joinModal');
+  if (modal) modal.style.display = 'none';
+  logoutGuest();
+});
+
+$('exitGuestBtn')?.addEventListener('click', () => {
+  logoutGuest();
+  toast('undo', 'Switched back to Owner mode.');
+});
+
+// Owner Join Code Generation listener
+$('genJoinCodeBtn')?.addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/owner/join-code', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      const codeBox = $('generatedCodeBox');
+      if (codeBox) codeBox.textContent = data.code;
+      const noteBox = $('codeExpiryNote');
+      if (noteBox) noteBox.textContent = `Single-use code · Expires ${new Date(data.expiresAt).toLocaleTimeString()}`;
+      const codeModal = $('ownerCodeModal');
+      if (codeModal) codeModal.style.display = 'flex';
+    } else {
+      toast('alert', `Could not generate join code: ${data.error}`, true);
+    }
+  } catch (err) {
+    toast('alert', `Error: ${err.message}`, true);
+  }
+});
+
+$('copyCodeBtn')?.addEventListener('click', () => {
+  const codeBox = $('generatedCodeBox');
+  const code = codeBox ? codeBox.textContent : '';
+  if (code && navigator.clipboard) {
+    navigator.clipboard.writeText(code);
+    toast('check', `Copied code ${code} to clipboard!`);
+  }
+});
+
+$('closeCodeBtn')?.addEventListener('click', () => {
+  const codeModal = $('ownerCodeModal');
+  if (codeModal) codeModal.style.display = 'none';
+});
+
 // -------------------------------------------------------------------- boot --
+initMultiuser();
 layoutCity();
 if (matchMedia('(max-width: 700px)').matches) $('feed').classList.add('collapsed');
 poll();
