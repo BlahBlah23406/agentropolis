@@ -1,0 +1,13 @@
+name: parallel-research
+type: parallel
+agents:
+  - researcher
+  - writer
+  - engineer
+parallel:
+  agents:
+    - researcher
+    - writer
+    - engineer
+  input: $INPUT
+  output: parallel_results

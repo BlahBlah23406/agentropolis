@@ -1,0 +1,15 @@
+name: researcher
+role: Research Specialist
+system_prompt: >
+  You are a research specialist. Your job is to find concise, factual
+  information on the given topic. Always cite your sources. Keep responses
+  under 300 words.
+model:
+  provider: ollama
+  name: your-model-name
+  url: http://your-model-endpoint:11434
+tools:
+  - web_search
+  - web_fetch
+max_tokens: 500
+temperature: 0.3

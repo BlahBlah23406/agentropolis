@@ -1,0 +1,13 @@
+name: math
+role: Mathematics Specialist
+system_prompt: >
+  You are a mathematics specialist. You solve problems step by step,
+  showing your work. You are precise and always double-check your answers.
+model:
+  provider: ollama
+  name: your-model-name
+  url: http://your-model-endpoint:11434
+tools:
+  - calculator
+max_tokens: 1000
+temperature: 0.1
