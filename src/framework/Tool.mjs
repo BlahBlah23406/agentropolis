@@ -1,56 +1,128 @@
-// agentropolis — Tool registry
-// Define tools as JSON schema + handler. Validate inputs, execute.
+// agentropolis — Tools
+//
+// A Tool is a name + description + JSON Schema + handler. The schema is used
+// both to validate calls before they reach the handler and to describe the tool
+// to a model in its system prompt.
+//
+// The validator is deliberately small and dependency-free: it covers the subset
+// of JSON Schema that tool inputs actually use (types, required, nested objects,
+// arrays, enums, numeric and string bounds).
 
-/**
- * Registry of tools available to agents.
- * Each tool has a name, description, JSON schema for input validation,
- * and an async handler function.
- */
+import './types.mjs';
+
+export class Tool {
+  /**
+   * @param {{name: string, description?: string, schema?: Object, handler: Function}} def
+   */
+  constructor(def) {
+    if (!def || typeof def !== 'object') throw new Error('Tool definition must be an object');
+    if (typeof def.name !== 'string' || !def.name.trim()) {
+      throw new Error('Tool name must be a non-empty string');
+    }
+    if (typeof def.handler !== 'function') {
+      throw new Error(`Tool "${def.name}" handler must be a function`);
+    }
+
+    this.name = def.name;
+    this.description = def.description || '';
+    this.schema = def.schema || {};
+    this.handler = def.handler;
+  }
+
+  /**
+   * Validate an input against this tool's schema.
+   * @param {*} input
+   * @returns {{ok: boolean, errors: string[]}}
+   */
+  validate(input) {
+    return validateSchema(input, this.schema);
+  }
+
+  /**
+   * Validate then run.
+   * @param {*} input
+   * @param {Object} [context] - passed to the handler as a second argument
+   * @returns {Promise<*>}
+   */
+  async execute(input, context) {
+    const result = this.validate(input);
+    if (!result.ok) {
+      throw new Error(`Tool "${this.name}" input validation failed: ${result.errors.join('; ')}`);
+    }
+    return this.handler(input, context);
+  }
+
+  /** @returns {{name: string, description: string, schema: Object}} */
+  toJSON() {
+    return { name: this.name, description: this.description, schema: this.schema };
+  }
+}
+
 export class ToolRegistry {
   constructor() {
-    /** @type {Map<string, ToolDefinition>} */
+    /** @type {Map<string, Tool>} */
     this._tools = new Map();
   }
 
   /**
-   * Register a tool.
-   * @param {string} name - unique tool name
-   * @param {string} description - what the tool does
-   * @param {Object} schema - JSON schema for input validation
-   * @param {Function} handler - async (input) => result
-   * @returns {ToolRegistry} this (for chaining)
+   * Register a tool from a Tool instance or a plain definition object.
+   * @param {Tool|ToolDefinition} tool
+   * @returns {Tool}
+   */
+  register(tool) {
+    const instance = tool instanceof Tool ? tool : new Tool(tool);
+    if (this._tools.has(instance.name)) {
+      throw new Error(`Tool "${instance.name}" is already registered`);
+    }
+    this._tools.set(instance.name, instance);
+    return instance;
+  }
+
+  /**
+   * Register a tool from positional arguments.
+   * @param {string} name
+   * @param {string} description
+   * @param {Object} schema
+   * @param {Function} handler
+   * @returns {ToolRegistry} this
    */
   define(name, description, schema, handler) {
-    if (typeof name !== 'string' || !name.trim()) throw new Error('Tool name must be a non-empty string');
-    if (typeof handler !== 'function') throw new Error(`Tool "${name}" handler must be a function`);
-    if (this._tools.has(name)) throw new Error(`Tool "${name}" is already registered`);
-    this._tools.set(name, { name, description: description || '', schema: schema || {}, handler });
+    this.register(new Tool({ name, description, schema, handler }));
     return this;
   }
 
   /**
-   * Register multiple tools from a plain object.
+   * Register several tools from a name -> definition map.
    * @param {Record<string, {description?: string, schema?: Object, handler: Function}>} tools
    * @returns {ToolRegistry} this
    */
   defineAll(tools) {
-    for (const [name, def] of Object.entries(tools)) {
-      this.define(name, def.description || '', def.schema || {}, def.handler);
+    for (const [name, def] of Object.entries(tools || {})) {
+      this.register(new Tool({ name, ...def }));
     }
     return this;
   }
 
   /**
-   * Get a tool by name.
+   * Replace a tool, whether or not it already exists.
+   * @param {Tool|ToolDefinition} tool
+   * @returns {Tool}
+   */
+  override(tool) {
+    const instance = tool instanceof Tool ? tool : new Tool(tool);
+    this._tools.set(instance.name, instance);
+    return instance;
+  }
+
+  /**
    * @param {string} name
-   * @returns {ToolDefinition | undefined}
+   * @returns {Tool|undefined}
    */
   get(name) {
     return this._tools.get(name);
   }
 
   /**
-   * Check if a tool exists.
    * @param {string} name
    * @returns {boolean}
    */
@@ -59,131 +131,161 @@ export class ToolRegistry {
   }
 
   /**
-   * List all registered tool names.
-   * @returns {string[]}
+   * @param {string} name
+   * @returns {boolean} true if a tool was removed
    */
+  remove(name) {
+    return this._tools.delete(name);
+  }
+
+  /** @returns {string[]} */
   list() {
     return [...this._tools.keys()];
   }
 
   /**
-   * Validate input against a tool's JSON schema (simple validation).
-   * @param {string} toolName
+   * Validate an input against a registered tool's schema.
+   * @param {string} name
    * @param {*} input
    * @returns {{ok: boolean, errors: string[]}}
    */
-  validate(toolName, input) {
-    const tool = this._tools.get(toolName);
-    if (!tool) return { ok: false, errors: [`Tool "${toolName}" not found`] };
-    return validateSchema(input, tool.schema);
+  validate(name, input) {
+    const tool = this._tools.get(name);
+    if (!tool) return { ok: false, errors: [`tool "${name}" is not registered`] };
+    return tool.validate(input);
   }
 
   /**
-   * Execute a tool by name.
-   * @param {string} toolName
+   * Validate and execute a registered tool.
+   * @param {string} name
    * @param {*} input
-   * @returns {Promise<*>} tool result
+   * @param {Object} [context]
+   * @returns {Promise<*>}
    */
-  async execute(toolName, input) {
-    const tool = this._tools.get(toolName);
-    if (!tool) throw new Error(`Tool "${toolName}" not found`);
-    const v = this.validate(toolName, input);
-    if (!v.ok) throw new Error(`Tool "${toolName}" input validation failed: ${v.errors.join(', ')}`);
-    return await tool.handler(input);
+  async execute(name, input, context) {
+    const tool = this._tools.get(name);
+    if (!tool) {
+      const known = this.list();
+      throw new Error(
+        `Tool "${name}" is not registered. Known tools: ${known.length ? known.join(', ') : '(none)'}`
+      );
+    }
+    return tool.execute(input, context);
   }
 
   /**
-   * Get tool definitions for a subset of tools (for agent context).
+   * Resolve a subset of tools by name, skipping ones that are not registered.
+   *
+   * An agent listing a tool nobody registered is a configuration gap, not a
+   * crash: the agent simply runs without it, and the omission is visible in
+   * `toJSON()`.
+   *
    * @param {string[]} names
-   * @returns {ToolDefinition[]}
+   * @returns {Tool[]}
    */
   forAgent(names) {
-    return (names || [])
-      .map((n) => this._tools.get(n))
-      .filter(Boolean);
+    return (names || []).map((n) => this._tools.get(n)).filter(Boolean);
   }
 
   /**
-   * Serialize tools to a plain object (for JSON output).
    * @param {string[]} [names] - optional subset
    * @returns {Object[]}
    */
   toJSON(names) {
-    const tools = names
-      ? names.map((n) => this._tools.get(n)).filter(Boolean)
-      : [...this._tools.values()];
-    return tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      schema: t.schema,
-    }));
+    const tools = names ? this.forAgent(names) : [...this._tools.values()];
+    return tools.map((t) => t.toJSON());
   }
 }
 
 /**
- * Simple JSON schema validator (does not depend on ajv or similar).
- * Supports: type, required, properties, items, enum, minimum, maximum.
+ * Validate a value against a JSON Schema subset.
+ *
+ * Supported keywords: type, enum, const, required, properties,
+ * additionalProperties (false), items, minItems, maxItems, minimum, maximum,
+ * minLength, maxLength, pattern.
+ *
  * @param {*} value
  * @param {Object} schema
+ * @param {string} [path] - property path used in error messages
  * @returns {{ok: boolean, errors: string[]}}
  */
-function validateSchema(value, schema) {
+export function validateSchema(value, schema, path = '') {
   const errors = [];
-  if (!schema || Object.keys(schema).length === 0) return { ok: true, errors };
+  if (!schema || typeof schema !== 'object' || Object.keys(schema).length === 0) {
+    return { ok: true, errors };
+  }
 
-  // type check
+  const at = path ? `${path}: ` : '';
+  const actual = jsonTypeOf(value);
+
   if (schema.type) {
-    const t = Array.isArray(schema.type) ? schema.type : [schema.type];
-    const actual = Array.isArray(value) ? 'array' : typeof value;
-    if (!t.includes(actual)) {
-      errors.push(`expected type ${t.join('|')}, got ${actual}`);
-      return { ok: false, errors };
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    // JSON Schema treats an integer as a number; mirror that.
+    const matches = types.some((t) => t === actual || (t === 'number' && actual === 'integer'));
+    if (!matches) {
+      errors.push(`${at}expected ${types.join(' | ')}, got ${actual}`);
+      return { ok: false, errors }; // further checks would be meaningless
     }
   }
 
-  // enum
   if (schema.enum && !schema.enum.includes(value)) {
-    errors.push(`value must be one of: ${schema.enum.join(', ')}`);
+    errors.push(`${at}must be one of: ${schema.enum.map((v) => JSON.stringify(v)).join(', ')}`);
+  }
+  if ('const' in schema && value !== schema.const) {
+    errors.push(`${at}must equal ${JSON.stringify(schema.const)}`);
   }
 
-  // numeric constraints
   if (typeof value === 'number') {
-    if (schema.minimum !== undefined && value < schema.minimum)
-      errors.push(`value must be >= ${schema.minimum}`);
-    if (schema.maximum !== undefined && value > schema.maximum)
-      errors.push(`value must be <= ${schema.maximum}`);
+    if (schema.minimum !== undefined && value < schema.minimum) {
+      errors.push(`${at}must be >= ${schema.minimum}`);
+    }
+    if (schema.maximum !== undefined && value > schema.maximum) {
+      errors.push(`${at}must be <= ${schema.maximum}`);
+    }
   }
 
-  // string constraints
   if (typeof value === 'string') {
-    if (schema.minLength !== undefined && value.length < schema.minLength)
-      errors.push(`string length must be >= ${schema.minLength}`);
-    if (schema.maxLength !== undefined && value.length > schema.maxLength)
-      errors.push(`string length must be <= ${schema.maxLength}`);
-    if (schema.pattern && !new RegExp(schema.pattern).test(value))
-      errors.push(`string must match pattern: ${schema.pattern}`);
+    if (schema.minLength !== undefined && value.length < schema.minLength) {
+      errors.push(`${at}must be at least ${schema.minLength} characters`);
+    }
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) {
+      errors.push(`${at}must be at most ${schema.maxLength} characters`);
+    }
+    if (schema.pattern) {
+      let re = null;
+      try { re = new RegExp(schema.pattern); } catch { errors.push(`${at}invalid schema pattern`); }
+      if (re && !re.test(value)) errors.push(`${at}must match ${schema.pattern}`);
+    }
   }
 
-  // object properties
-  if (schema.properties && typeof value === 'object' && !Array.isArray(value)) {
-    if (schema.required) {
-      for (const r of schema.required) {
-        if (!(r in value)) errors.push(`missing required property: ${r}`);
-      }
+  if (actual === 'object') {
+    for (const key of schema.required || []) {
+      if (!(key in value)) errors.push(`${at}missing required property "${key}"`);
     }
-    for (const [key, subSchema] of Object.entries(schema.properties)) {
+    for (const [key, sub] of Object.entries(schema.properties || {})) {
       if (key in value) {
-        const sub = validateSchema(value[key], subSchema);
-        if (!sub.ok) errors.push(`property "${key}": ${sub.errors.join('; ')}`);
+        errors.push(...validateSchema(value[key], sub, path ? `${path}.${key}` : key).errors);
+      }
+    }
+    if (schema.additionalProperties === false && schema.properties) {
+      const allowed = new Set(Object.keys(schema.properties));
+      for (const key of Object.keys(value)) {
+        if (!allowed.has(key)) errors.push(`${at}unexpected property "${key}"`);
       }
     }
   }
 
-  // array items
-  if (Array.isArray(value) && schema.items) {
-    for (let i = 0; i < value.length; i++) {
-      const sub = validateSchema(value[i], schema.items);
-      if (!sub.ok) errors.push(`item[${i}]: ${sub.errors.join('; ')}`);
+  if (actual === 'array') {
+    if (schema.minItems !== undefined && value.length < schema.minItems) {
+      errors.push(`${at}must have at least ${schema.minItems} item(s)`);
+    }
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) {
+      errors.push(`${at}must have at most ${schema.maxItems} item(s)`);
+    }
+    if (schema.items) {
+      value.forEach((item, i) => {
+        errors.push(...validateSchema(item, schema.items, `${path}[${i}]`).errors);
+      });
     }
   }
 
@@ -191,41 +293,27 @@ function validateSchema(value, schema) {
 }
 
 /**
- * Create a standalone tool definition (without a registry).
- * @param {string} name
- * @param {string} description
- * @param {Object} schema
- * @param {Function} handler
- * @returns {ToolDefinition}
+ * JSON Schema's notion of a value's type (null and array are distinct).
+ * @param {*} value
+ * @returns {string}
+ */
+function jsonTypeOf(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  const t = typeof value;
+  if (t === 'number') return Number.isInteger(value) ? 'integer' : 'number';
+  return t;
+}
+
+/**
+ * Create a Tool without a registry.
+ * @param {string|Object} name - tool name, or a whole definition object
+ * @param {string} [description]
+ * @param {Object} [schema]
+ * @param {Function} [handler]
+ * @returns {Tool}
  */
 export function defineTool(name, description, schema, handler) {
-  return { name, description, schema, handler };
+  if (typeof name === 'object' && name !== null) return new Tool(name);
+  return new Tool({ name, description, schema, handler });
 }
-
-/**
- * Validate a value against a JSON schema subset, standalone.
- * Supports: type, enum, required, properties, items, minimum, maximum,
- * minLength, maxLength, pattern.
- * @param {*} value
- * @param {Object} schema
- * @returns {{ok: boolean, errors: string[]}}
- */
-export function validateAgainstSchema(value, schema) {
-  return validateSchema(value, schema);
-}
-
-/**
- * `Tool` is the namespace form of the tool API, so the documented import
- * `import { Tool } from 'agentropolis'` works alongside the class form.
- *
- * @example
- * const search = Tool.define('search', 'Search the web',
- *   { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
- *   async ({ q }) => `results for ${q}`);
- */
-export const Tool = Object.freeze({
-  define: defineTool,
-  validate: validateAgainstSchema,
-  Registry: ToolRegistry,
-  createRegistry: () => new ToolRegistry(),
-});

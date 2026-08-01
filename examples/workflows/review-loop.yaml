@@ -1,0 +1,39 @@
+# Graph workflow: conditional routing with a revision loop.
+#
+#   draft -> review -+-- APPROVED --> polish -> END
+#                    |
+#                    +-- otherwise --> draft (revise and try again)
+#
+# `max_steps` bounds the loop, so a reviewer that never approves terminates
+# instead of running forever.
+name: review-loop
+type: graph
+
+agents:
+  - writer
+  - engineer
+
+graph:
+  entry: draft
+  max_steps: 10
+  steps:
+    - id: draft
+      agent: writer
+      input: $INPUT
+      output: draft_text
+      next: review
+
+    - id: review
+      agent: engineer
+      input: draft_text
+      output: review_notes
+      condition:
+        if: "output.includes('APPROVED')"
+        then: polish
+        else: draft
+
+    - id: polish
+      agent: writer
+      input: draft_text
+      output: final_text
+      next: END

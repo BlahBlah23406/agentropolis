@@ -1,9 +1,17 @@
+# Conversational round-robin: the agents talk to each other about the input.
+#
+# Every turn sees the full transcript so far. `stop_when` ends the discussion
+# early once an agent signals consensus, instead of always burning max_rounds.
 name: team-discussion
 type: conversation
+
 agents:
   - researcher
-  - writer
   - engineer
+  - writer
+
 conversation:
   max_rounds: 3
   selector: round_robin
+  stop_when: "output.includes('CONSENSUS')"
+  output: discussion_summary

@@ -1,12 +1,19 @@
+# Sequential pipeline: research a topic, then write it up.
+#
+# Each step's `output` is stored in workflow state under that name, so a later
+# step can reference it by name instead of only receiving the previous result.
 name: research-and-write
 type: sequential
+
 agents:
   - researcher
   - writer
+
 steps:
   - agent: researcher
     input: $INPUT
     output: research_result
+
   - agent: writer
     input: research_result
     output: final_article

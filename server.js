@@ -30,7 +30,15 @@ const PORT = Number(process.env.PORT || 8347);
 const HOST = process.env.HOST || '0.0.0.0';
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const OC = process.env.AGENTROPOLIS_HOME || join(homedir(), '.agentropolis');
-const GATEWAY_PORT = 18789;
+const GATEWAY_PORT = Number(process.env.AGENTROPOLIS_GATEWAY_PORT || 18789);
+
+// Optional host-system files the city dashboard reads (read-only) to show a
+// live pulse. Every one of these is best-effort: if the file is absent the
+// corresponding panel is simply empty. Override the paths to point the
+// dashboard at whatever agent system you actually run.
+const HOST_CONFIG_FILE = process.env.AGENTROPOLIS_HOST_CONFIG || join(OC, 'config.json');
+const HOST_STATE_DB = process.env.AGENTROPOLIS_STATE_DB || join(OC, 'state', 'agent-state.sqlite');
+const HOST_WORKBOARD_DB = process.env.AGENTROPOLIS_WORKBOARD_DB || join(OC, 'workboard.sqlite');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -53,18 +61,39 @@ async function frameworkProject() {
   return data;
 }
 
-// Run a workflow definition by name against the project's agents. Model calls
-// go through the same Ollama-compatible endpoint the rest of the server uses.
-async function frameworkRun(workflowName, input) {
+// Build a fresh Orchestrator per request. Definitions are re-read from disk on
+// a short cache, so editing a YAML file takes effect without a restart.
+async function frameworkOrchestrator() {
   const { agents, workflows } = await frameworkProject();
-  const def = workflows.find((w) => w.name === workflowName);
-  if (!def) throw new Error(`workflow "${workflowName}" not found in ${PROJECT_DIR}`);
   const orch = createOrchestrator();
   orch.registerAgents(agents);
-  return orch.runWorkflow(def, input);
+  orch.registerWorkflows(workflows);
+
+  // Agents whose definition omits a model URL fall back to this server's
+  // configured Ollama endpoint, so the bundled examples run out of the box.
+  for (const agent of agents) {
+    const instance = orch.getAgent(agent.name);
+    if (!instance.model.url || instance.model.url === 'your-model-endpoint') {
+      instance.model = { ...instance.model, url: OLLAMA_URL };
+    }
+  }
+  return orch;
 }
 
-// ------------------------------------------------------- OpenClaw snapshot ---
+/**
+ * Run a workflow by name and return its result.
+ * @param {string} workflowName
+ * @param {*} input
+ */
+async function frameworkRun(workflowName, input) {
+  const orch = await frameworkOrchestrator();
+  if (!orch.listWorkflows().includes(workflowName)) {
+    throw new Error(`workflow "${workflowName}" not found in ${PROJECT_DIR}`);
+  }
+  return orch.run(workflowName, input);
+}
+
+// ------------------------------------------------------- host system snapshot ---
 
 function rows(dbPath, sql, ...params) {
   const db = new DatabaseSync(dbPath, { readOnly: true });
@@ -87,7 +116,7 @@ async function collectState() {
   state.gateway = { up: await gatewayUp(), port: GATEWAY_PORT };
 
   try {
-    const cfg = JSON.parse(await readFile(join(OC, 'openclaw.json'), 'utf8'));
+    const cfg = JSON.parse(await readFile(HOST_CONFIG_FILE, 'utf8'));
     state.version = cfg?.meta?.lastTouchedVersion || null;
     state.primaryModel = cfg?.agents?.defaults?.model?.primary || null;
     const models = new Set();
@@ -98,7 +127,7 @@ async function collectState() {
   } catch (err) { state.configError = err.message; }
 
   try {
-    const wb = join(OC, 'plugins', 'workboard', 'workboard.sqlite');
+    const wb = HOST_WORKBOARD_DB;
     state.workboard = {
       counts: Object.fromEntries(rows(wb,
         `select status, count(*) n from workboard_cards where archived_at is null group by status`)
@@ -109,7 +138,7 @@ async function collectState() {
     };
   } catch (err) { state.workboard = { error: err.message }; }
 
-  const main = join(OC, 'state', 'openclaw.sqlite');
+  const main = HOST_STATE_DB;
   try {
     state.cron = rows(main,
       `select j.name, j.enabled, j.schedule_expr, j.every_ms, r.status last_status,
@@ -190,7 +219,7 @@ async function transcriptTail(sessionId, maxMsgs = 6, maxLen = 300, tailBytes = 
       const text = textOf(m).trim();
       if (!text) continue;
       // heartbeat/system chatter isn't conversation — keep it off the HoloNet
-      if (/^\[OpenClaw heartbeat|^HEARTBEAT_OK$|^NO_REPLY$|^SystemExec:/i.test(text)) continue;
+      if (/^\[agent heartbeat|^HEARTBEAT_OK$|^NO_REPLY$|^SystemExec:/i.test(text)) continue;
       msgs.push({ role, text: text.slice(0, maxLen) });
     }
     return msgs.slice(-maxMsgs);
@@ -201,7 +230,7 @@ async function transcriptTail(sessionId, maxMsgs = 6, maxLen = 300, tailBytes = 
 
 // Full-ish chat log for one session, for the web console's log viewer.
 // The key is validated against sessions.json, so only real sessions resolve
-// and the transcript path always comes from OpenClaw's own records.
+// and the transcript path always comes from the host system's own records.
 async function sessionLog(key) {
   const sessions = JSON.parse(await readFile(join(SESSIONS_DIR, 'sessions.json'), 'utf8'));
   const s = sessions[key];
@@ -228,7 +257,7 @@ async function collectActivity() {
     }
   } catch (err) { act.discordError = err.message; }
 
-  const db = join(OC, 'state', 'openclaw.sqlite');
+  const db = HOST_STATE_DB;
   const dayAgo = Date.now() - 86400000;
   try {
     // '[Subagent Context]' rows mirror subagent_runs — skip them to avoid doubles
@@ -329,7 +358,7 @@ async function collectCity() {
   city.gateway = { up: await gatewayUp(), port: GATEWAY_PORT };
   city.events = await tailCityEvents();
   // live subagent/cron/task pulse reused by the city (cheap queries, day scope)
-  const db = join(OC, 'state', 'openclaw.sqlite');
+  const db = HOST_STATE_DB;
   const dayAgo = Date.now() - 86400000;
   try {
     city.subagents = rows(db,
@@ -344,7 +373,7 @@ async function collectCity() {
          and r.ts = (select max(ts) from cron_run_logs r2 where r2.job_id = j.job_id)`);
   } catch { /* ignore */ }
   try {
-    const wb = join(OC, 'plugins', 'workboard', 'workboard.sqlite');
+    const wb = HOST_WORKBOARD_DB;
     city.workboard = Object.fromEntries(rows(wb,
       `select status, count(*) n from workboard_cards where archived_at is null group by status`)
       .map(r => [r.status, r.n]));
@@ -617,26 +646,38 @@ async function aiPlanCity(promptText) {
 }
 
 // -------------------------------------------------------------- missions ---
-// A mission transmitted from the base runs a REAL OpenClaw agent turn (its
-// own session, so the main Discord session is untouched) and the reply is
-// delivered to the user's Discord — same path the assistant normally uses.
+// A mission typed into the city console is handed to an external agent CLI, so
+// the dashboard can drive whatever assistant the operator already runs.
+//
+// This is an OPTIONAL integration. Point AGENTROPOLIS_AGENT_CLI at a CLI that
+// accepts the argument shape below; leave it unset and the endpoint reports
+// that missions are not configured instead of spawning a path that may not
+// exist. Nothing in src/framework/ depends on any of this.
 
-const NODE_EXE = 'C:\\Program Files\\nodejs\\node.exe';
-const OPENCLAW_CLI = join(homedir(), 'AppData', 'Roaming', 'npm', 'node_modules', 'openclaw', 'dist', 'index.js');
-const DISCORD_TARGET = process.env.AGENTROPOLIS_DISCORD_TO || '';
+const NODE_EXE = process.env.AGENTROPOLIS_NODE || process.execPath;
+const AGENT_CLI = process.env.AGENTROPOLIS_AGENT_CLI || '';
+const DELIVERY_TARGET = process.env.AGENTROPOLIS_DELIVER_TO || '';
+const DELIVERY_CHANNEL = process.env.AGENTROPOLIS_DELIVER_CHANNEL || 'discord';
 let missionsInFlight = 0;
 
 function runMission(text) {
+  if (!AGENT_CLI) {
+    return Promise.resolve({
+      ok: false,
+      reply: 'Missions are not configured on this server. Set AGENTROPOLIS_AGENT_CLI to an agent ' +
+        'CLI entry point to enable them, or use POST /api/framework/run to run a framework workflow.',
+    });
+  }
   return new Promise((resolve) => {
     const args = [
-      OPENCLAW_CLI, 'agent',
+      AGENT_CLI, 'agent',
       '--agent', 'main',
       // one session per mission: a privacy lock on one mission must never
       // leak onto every later web-console order (that stall ate a real task
       // on 2026-07-10 when the shared key was left privacy-locked)
       '--session-key', `agent:main:agentropolis-web-${Date.now()}`,
       '--message', `[Mission from the Agentropolis web console] ${text}`,
-      '--deliver', '--reply-channel', 'discord', '--reply-to', DISCORD_TARGET,
+      '--deliver', '--reply-channel', DELIVERY_CHANNEL, '--reply-to', DELIVERY_TARGET,
       '--json', '--timeout', '540',
     ];
     execFile(NODE_EXE, args, {
@@ -845,6 +886,75 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Live view of a run. Each workflow event is pushed as it happens, so a UI
+  // can show progress instead of waiting for the whole workflow to finish.
+  if (url.pathname === '/api/framework/stream') {
+    const name = url.searchParams.get('workflow');
+    const input = url.searchParams.get('input') ?? '';
+    res.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache',
+      connection: 'keep-alive',
+    });
+
+    const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    const controller = new AbortController();
+    req.on('close', () => controller.abort());
+
+    try {
+      if (!name) throw new Error('query must include ?workflow=<name>');
+      const orch = await frameworkOrchestrator();
+      if (!orch.listWorkflows().includes(name)) {
+        throw new Error(`workflow "${name}" not found in ${PROJECT_DIR}`);
+      }
+      for await (const event of orch.stream(name, input, { signal: controller.signal })) {
+        // `error` holds an Error instance, which does not survive JSON.
+        const { error, result, ...safe } = event;
+        send(event.type, safe);
+      }
+      send('done', { ok: true });
+    } catch (err) {
+      send('error', { ok: false, error: err.message.slice(0, 500) });
+    }
+    res.end();
+    return;
+  }
+
+  if (url.pathname === '/api/framework/tools') {
+    try {
+      const orch = await frameworkOrchestrator();
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ tools: orch.getTools().toJSON() }));
+    } catch (err) {
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Namespace index — what the framework surface offers.
+  if (url.pathname === '/api/framework' || url.pathname === '/api/framework/') {
+    try {
+      const { agents, workflows } = await frameworkProject();
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({
+        projectDir: PROJECT_DIR,
+        counts: { agents: agents.length, workflows: workflows.length },
+        routes: [
+          'GET  /api/framework/agents',
+          'GET  /api/framework/workflows',
+          'GET  /api/framework/tools',
+          'POST /api/framework/run       {"workflow":"<name>","input":"<text>"}',
+          'GET  /api/framework/stream?workflow=<name>&input=<text>  (SSE)',
+        ],
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
   if (url.pathname === '/api/state') {
     try {
       const body = await stateJSON();
@@ -893,5 +1003,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Agentropolis is online: http://127.0.0.1:${PORT}  (bound to ${HOST})`);
-  console.log(`Ollama proxy -> ${OLLAMA_URL}; OpenClaw state <- ${OC} (read-only)`);
+  console.log(`Ollama proxy -> ${OLLAMA_URL}; host state <- ${OC} (read-only)`);
 });

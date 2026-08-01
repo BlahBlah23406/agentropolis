@@ -1,4 +1,4 @@
-﻿// Agentropolis — the OpenClaw government as a living ISOMETRIC city
+﻿// Agentropolis — your agent system as a living ISOMETRIC city
 // (Pocket City-style: colorful extruded buildings on a grass grid, roads to
 // the capitol plaza, data trucks driving real dispatches between buildings).
 //

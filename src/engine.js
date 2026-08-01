@@ -2,9 +2,9 @@
 // Derived from ~/agentropolis/src/engine.js (MIT). Pure ES module, zero deps.
 // Runs in Node (tests) and the browser (the base view draws this state).
 //
-// The metaphor, mapped to THIS machine's real OpenClaw stack:
+// The metaphor, mapped to THIS machine's host agent stack:
 //   General's mission    -> user prompt (normally arrives via Discord)
-//   Command Dome   -> OpenClaw gateway: intake + result delivery
+//   Command Dome   -> agent gateway: intake + result delivery
 //   War Room             -> cloud-router orchestrator (GLM-5.2)
 //   Holocron Library     -> research specialist (your-model-name)
 //   Astromech Calc-Core  -> math/estimates (nemotron-3-ultra reserve)
@@ -28,7 +28,7 @@ const COL_X = [24, 260, 496, 732, 968];
 
 export const DEPARTMENTS = {
   command: { id: 'command', name: 'Command Dome', emoji: '\u{1F916}', row: 0, col: 0, workers: 1, duration: 0,
-    desc: 'The little droid himself. Missions launch from here and finished work beeps back. Real system: the OpenClaw gateway (port 18789) + your Discord channel.' },
+    desc: 'The little droid himself. Missions launch from here and finished work beeps back. Real system: the agent gateway (port 18789) + your Discord channel.' },
   dispatch: { id: 'dispatch', name: 'War Room', emoji: '\u{1F9ED}', row: 0, col: 1, workers: 2, duration: 0.8,
     desc: 'Reads every mission and plans which bays handle it, in what sequence. Real system: the cloud-router orchestrator, GLM-5.2.' },
   research: { id: 'research', name: 'Holocron Library', emoji: '\u{1F4DA}', row: 0, col: 2, workers: 2, duration: 2.2,

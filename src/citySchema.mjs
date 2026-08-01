@@ -37,16 +37,6 @@ export const DEFAULT_DEPTS_FILE = fileURLToPath(
   new URL('../config/departments.json', import.meta.url),
 );
 
-// Which registry file loadRegistry() will actually read.
-export function registryPath() {
-  try {
-    readFileSync(DEPTS_FILE, 'utf8');
-    return DEPTS_FILE;
-  } catch {
-    return DEFAULT_DEPTS_FILE;
-  }
-}
-
 // Reads the operator's registry, falling back to the bundled default when it
 // is absent. An explicit `path` argument is always honored as given.
 export function loadRegistry(path) {

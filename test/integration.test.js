@@ -1,292 +1,321 @@
-import { describe, it } from 'node:test';
+// End-to-end: YAML on disk -> Orchestrator -> workflow result, against a mock
+// model. Nothing here touches the network.
+import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createOrchestrator } from '../src/framework/Orchestrator.mjs';
-import { createAgent } from '../src/framework/Agent.mjs';
-import { createWorkflow } from '../src/framework/Workflow.mjs';
-import { ToolRegistry } from '../src/framework/Tool.mjs';
+
 import {
-  loadProject,
-  validateAgentDefinition,
-  validateWorkflowDefinition,
-} from '../src/framework/Loader.mjs';
+  createFramework,
+  loadFramework,
+  run,
+  defineTool,
+  Orchestrator,
+} from '../src/framework/index.mjs';
 
-// End-to-end integration test: define agents, create a workflow, run with mock model.
-// No real model calls — everything is mocked.
-
-// The examples/ directory is the documented starting point, so it is exercised
-// exactly the way a reader would: load the YAML off disk, then run it.
 const EXAMPLES = fileURLToPath(new URL('../examples', import.meta.url));
 
-const mockInvoker = async (agent, prompt) => {
-  // Simulate different agents producing different outputs
-  if (agent.name === 'researcher') return `Research: ${prompt.slice(0, 30)}`;
-  if (agent.name === 'writer') return `Article based on: ${prompt.slice(0, 30)}`;
-  if (agent.name === 'reviewer') return `Review: looks good (${prompt.slice(0, 20)})`;
-  return `[${agent.name}] ${prompt.slice(0, 40)}`;
-};
+/** A project directory with two agents and one workflow, written as YAML. */
+async function project(t) {
+  const dir = await mkdtemp(join(tmpdir(), 'agentropolis-e2e-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
 
-describe('Integration: end-to-end workflow', () => {
-  it('should run a sequential research-and-write workflow', async () => {
-    const orch = createOrchestrator();
-    orch.setModelInvoker(mockInvoker);
+  await mkdir(join(dir, 'agents'), { recursive: true });
+  await mkdir(join(dir, 'workflows'), { recursive: true });
 
-    orch.registerAgent({
-      name: 'researcher',
-      role: 'Research Specialist',
-      systemPrompt: 'You are a research specialist.',
-      model: { provider: 'ollama', name: 'mock-model' },
-      tools: ['web_search'],
-    });
+  await writeFile(join(dir, 'agents', 'researcher.yaml'), [
+    'name: researcher',
+    'role: Research Specialist',
+    'system_prompt: You are a research specialist. Find concise, factual information.',
+    'model:',
+    '  provider: ollama',
+    '  name: your-model-name',
+    '  url: your-model-endpoint',
+    'max_tokens: 500',
+    'temperature: 0.3',
+  ].join('\n'));
 
-    orch.registerAgent({
-      name: 'writer',
-      role: 'Writer',
-      systemPrompt: 'You are a writer.',
-      model: { provider: 'ollama', name: 'mock-model' },
-    });
+  await writeFile(join(dir, 'agents', 'writer.yaml'), [
+    'name: writer',
+    'role: Technical Writer',
+    'system_prompt: You are a technical writer. Turn notes into clear prose.',
+    'model:',
+    '  provider: ollama',
+    '  name: your-model-name',
+    '  url: your-model-endpoint',
+    'max_tokens: 800',
+    'temperature: 0.7',
+  ].join('\n'));
 
-    const result = await orch.runWorkflow({
-      name: 'research-and-write',
-      type: 'sequential',
-      agents: ['researcher', 'writer'],
-      steps: [
-        { agent: 'researcher', input: '$INPUT', output: 'research' },
-        { agent: 'writer', input: 'research', output: 'article' },
-      ],
-    }, 'quantum computing');
+  await writeFile(join(dir, 'workflows', 'research-and-write.yaml'), [
+    'name: research-and-write',
+    'type: sequential',
+    'agents:',
+    '  - researcher',
+    '  - writer',
+    'steps:',
+    '  - agent: researcher',
+    '    input: $INPUT',
+    '    output: research_result',
+    '  - agent: writer',
+    '    input: research_result',
+    '    output: final_result',
+  ].join('\n'));
 
-    assert(result.output);
-    assert.match(result.output, /^Article based on:/);
-    assert(result.state.research);
-    assert(result.state.article);
-    assert(result.duration >= 0);
-    assert(result.events.length > 0);
-  });
+  return dir;
+}
 
-  it('should run a parallel research workflow', async () => {
-    const orch = createOrchestrator();
-    orch.setModelInvoker(mockInvoker);
+/** A model that records what it was asked and answers deterministically. */
+function recordingModel(calls) {
+  return async (agent, prompt) => {
+    calls.push({ agent: agent.name, prompt, system: agent.buildSystemMessage() });
+    if (agent.name === 'researcher') return `FINDINGS about ${prompt}`;
+    if (agent.name === 'writer') return `ARTICLE based on: ${prompt}`;
+    return `${agent.name} replied`;
+  };
+}
 
-    orch.registerAgent({
-      name: 'researcher',
-      role: 'Researcher',
-      systemPrompt: 'You research things.',
-      model: { name: 'mock' },
-    });
-    orch.registerAgent({
-      name: 'reviewer',
-      role: 'Reviewer',
-      systemPrompt: 'You review things.',
-      model: { name: 'mock' },
-    });
+test('end to end — YAML definitions drive a sequential workflow', async (t) => {
+  const dir = await project(t);
+  const calls = [];
 
-    const result = await orch.runWorkflow({
-      name: 'parallel-review',
-      type: 'parallel',
-      agents: ['researcher', 'reviewer'],
-      parallel: {
-        agents: ['researcher', 'reviewer'],
-        input: '$INPUT',
-        output: 'combined',
-      },
-    }, 'AI safety');
+  const app = await loadFramework(dir, { modelInvoker: recordingModel(calls) });
 
-    assert(result.state.combined);
-    assert(result.state.combined.researcher);
-    assert(result.state.combined.reviewer);
-  });
+  assert.deepEqual(app.listAgents().sort(), ['researcher', 'writer']);
+  assert.deepEqual(app.listWorkflows(), ['research-and-write']);
 
-  it('should run a conversation workflow', async () => {
-    const orch = createOrchestrator();
-    orch.setModelInvoker(mockInvoker);
+  const result = await app.run('research-and-write', 'quantum error correction');
 
-    orch.registerAgent({
-      name: 'researcher',
-      role: 'Researcher',
-      systemPrompt: 'You research things.',
-      model: { name: 'mock' },
-    });
-    orch.registerAgent({
-      name: 'writer',
-      role: 'Writer',
-      systemPrompt: 'You write things.',
-      model: { name: 'mock' },
-    });
+  assert.equal(result.output, 'ARTICLE based on: FINDINGS about quantum error correction');
+  assert.equal(result.state.research_result, 'FINDINGS about quantum error correction');
+  assert.equal(result.state.final_result, result.output);
+  assert.equal(result.state.$INPUT, 'quantum error correction');
+  assert.ok(result.duration >= 0);
 
-    const result = await orch.runWorkflow({
-      name: 'discussion',
-      type: 'conversation',
-      agents: ['researcher', 'writer'],
-      conversation: { maxRounds: 2 },
-    }, 'climate change');
-
-    assert(result.output);
-    assert(result.duration >= 0);
-  });
-
-  it('should use tools in a workflow', async () => {
-    const orch = createOrchestrator();
-    orch.setModelInvoker(mockInvoker);
-
-    orch.registerTool('calculator', 'Add two numbers', {
-      type: 'object',
-      properties: { a: { type: 'number' }, b: { type: 'number' } },
-      required: ['a', 'b'],
-    }, async (input) => input.a + input.b);
-
-    const result = await orch.getTools().execute('calculator', { a: 5, b: 3 });
-    assert.equal(result, 8);
-  });
-
-  it('should validate definitions before running', () => {
-    const agentDef = {
-      name: 'bot',
-      systemPrompt: 'You are a bot.',
-      model: { name: 'mock' },
-    };
-    const v1 = validateAgentDefinition(agentDef);
-    assert(v1.ok);
-
-    const wfDef = {
-      name: 'test',
-      type: 'sequential',
-      agents: ['bot'],
-    };
-    const v2 = validateWorkflowDefinition(wfDef);
-    assert(v2.ok);
-  });
-
-  it('should handle workflow events via listeners', async () => {
-    const orch = createOrchestrator();
-    orch.setModelInvoker(mockInvoker);
-    orch.registerAgent({
-      name: 'bot',
-      systemPrompt: 'You are a bot.',
-      model: { name: 'mock' },
-    });
-
-    const wf = orch.createWorkflow({
-      name: 'eventful',
-      type: 'sequential',
-      agents: ['bot'],
-    });
-
-    const stepStarts = [];
-    const stepCompletes = [];
-    wf.on('step:start', (e) => stepStarts.push(e));
-    wf.on('step:complete', (e) => stepCompletes.push(e));
-
-    await wf.run('test input');
-
-    assert(stepStarts.length > 0);
-    assert(stepCompletes.length > 0);
-    assert.equal(stepStarts[0].agent, 'bot');
-  });
-
-  it('should run a graph workflow with conditional routing', async () => {
-    const orch = createOrchestrator();
-    orch.setModelInvoker(async (agent) => (agent.name === 'router' ? 'ESCALATE' : `handled by ${agent.name}`));
-    orch.registerAgent({ name: 'router', systemPrompt: 'route', model: { name: 'mock' } });
-    orch.registerAgent({ name: 'senior', systemPrompt: 'senior', model: { name: 'mock' } });
-    orch.registerAgent({ name: 'junior', systemPrompt: 'junior', model: { name: 'mock' } });
-
-    const result = await orch.runWorkflow({
-      name: 'triage',
-      type: 'graph',
-      agents: ['router', 'senior', 'junior'],
-      graph: {
-        entry: 'router',
-        steps: [
-          {
-            agent: 'router',
-            input: '$INPUT',
-            condition: { if: "output.includes('ESCALATE')", then: 'senior', else: 'junior' },
-          },
-          { agent: 'senior' },
-          { agent: 'junior' },
-        ],
-      },
-    }, 'a hard ticket');
-
-    assert.equal(result.output, 'handled by senior');
-  });
-
-  it('should apply middleware', async () => {
-    const orch = createOrchestrator();
-    orch.setModelInvoker(mockInvoker);
-    orch.registerAgent({
-      name: 'bot',
-      systemPrompt: 'You are a bot.',
-      model: { name: 'mock' },
-    });
-
-    const wf = orch.createWorkflow({
-      name: 'mw-test',
-      type: 'sequential',
-      agents: ['bot'],
-    });
-
-    const beforeCalls = [];
-    const afterCalls = [];
-    wf.use({
-      beforeStep: async (ctx) => { beforeCalls.push(ctx.agent.name); },
-      afterStep: async (ctx) => { afterCalls.push(ctx.agent.name); },
-    });
-
-    await wf.run('test');
-
-    assert.equal(beforeCalls.length, 1);
-    assert.equal(afterCalls.length, 1);
-    assert.equal(beforeCalls[0], 'bot');
-  });
+  // The YAML role prompt must actually reach the model.
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].system, /You are a research specialist\./);
+  assert.match(calls[1].system, /You are a technical writer\./);
 });
 
-// The examples/ directory is the documented starting point, so it is exercised
-// exactly the way a reader would: load the YAML off disk, then run it.
-describe('Integration: shipped examples in examples/', () => {
-  it('every example agent loads from YAML and validates', async () => {
-    const { agents } = await loadProject(EXAMPLES);
-    assert.deepEqual(
-      agents.map((a) => a.name).sort(),
-      ['engineer', 'math', 'researcher', 'writer'],
-    );
-    for (const a of agents) {
-      const v = validateAgentDefinition(a);
-      assert.ok(v.ok, `${a.name}: ${v.errors.join(', ')}`);
-      // snake_case YAML must arrive as camelCase the classes can use
-      assert.equal(typeof a.systemPrompt, 'string');
-      assert.ok(a.systemPrompt.length > 0);
+test('end to end — settings from YAML reach the agent instances', async (t) => {
+  const dir = await project(t);
+  const app = await loadFramework(dir);
+
+  const researcher = app.getAgent('researcher');
+  assert.equal(researcher.role, 'Research Specialist');
+  assert.equal(researcher.maxTokens, 500);
+  assert.equal(researcher.temperature, 0.3);
+  assert.equal(researcher.model.provider, 'ollama');
+  assert.equal(researcher.model.url, 'your-model-endpoint');
+
+  assert.equal(app.getAgent('writer').maxTokens, 800);
+});
+
+test('end to end — the run is observable as a stream of events', async (t) => {
+  const dir = await project(t);
+  const app = await loadFramework(dir, { modelInvoker: recordingModel([]) });
+
+  const events = [];
+  for await (const event of app.stream('research-and-write', 'topic')) {
+    events.push(event);
+  }
+
+  assert.deepEqual(
+    events.map((e) => e.type),
+    ['workflow:start', 'step:start', 'step:complete', 'step:start', 'step:complete', 'workflow:complete']
+  );
+  assert.deepEqual(
+    events.filter((e) => e.type === 'step:complete').map((e) => e.agent),
+    ['researcher', 'writer']
+  );
+  assert.ok(events.every((e) => e.workflow === 'research-and-write' && e.timestamp > 0));
+  assert.equal(events.at(-1).result.output, 'ARTICLE based on: FINDINGS about topic');
+});
+
+test('end to end — a JSON definition works the same as YAML', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'agentropolis-json-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await mkdir(join(dir, 'agents'), { recursive: true });
+  await mkdir(join(dir, 'workflows'), { recursive: true });
+
+  await writeFile(join(dir, 'agents', 'solo.json'), JSON.stringify({
+    name: 'solo', system_prompt: 'You work alone.', model: { name: 'your-model-name' },
+  }));
+  await writeFile(join(dir, 'workflows', 'one-step.json'), JSON.stringify({
+    name: 'one-step', type: 'sequential', agents: ['solo'],
+  }));
+
+  const app = await loadFramework(dir, { modelInvoker: async (_a, p) => `done:${p}` });
+  assert.equal((await app.run('one-step', 'task')).output, 'done:task');
+});
+
+test('end to end — a tool-using agent defined in YAML', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'agentropolis-tools-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await mkdir(join(dir, 'agents'), { recursive: true });
+
+  await writeFile(join(dir, 'agents', 'math.yaml'), [
+    'name: math',
+    'system_prompt: Use the calculator for arithmetic.',
+    'model: {name: your-model-name}',
+    'tools:',
+    '  - calculator',
+    'max_tool_iterations: 3',
+  ].join('\n'));
+
+  const calculator = defineTool(
+    'calculator',
+    'Evaluate an arithmetic expression',
+    { type: 'object', properties: { expression: { type: 'string' } }, required: ['expression'] },
+    async ({ expression }) => {
+      if (!/^[\d\s+\-*/().]+$/.test(expression)) throw new Error('unsupported expression');
+      return String(Function(`"use strict"; return (${expression});`)());
     }
+  );
+
+  let turn = 0;
+  const app = createFramework({
+    tools: [calculator],
+    modelInvoker: async (_agent, prompt) => {
+      turn++;
+      if (turn === 1) return '```json\n{"tool":"calculator","input":{"expression":"(120*3)+45"}}\n```';
+      return `Answer: ${prompt.match(/Tool result: (\S+)/)[1]}`;
+    },
+  });
+  await app.loadAgents(join(dir, 'agents'));
+
+  const result = await app.run(
+    { name: 'calc', type: 'sequential', agents: ['math'] },
+    'What is (120*3)+45?'
+  );
+
+  assert.equal(result.output, 'Answer: 405');
+  assert.equal(turn, 2, 'one tool call, then the final answer');
+  assert.match(app.getAgent('math').buildSystemMessage(), /calculator: Evaluate an arithmetic expression/);
+});
+
+test('end to end — human-in-the-loop middleware can veto a step', async (t) => {
+  const dir = await project(t);
+
+  const audit = [];
+  const approvals = { researcher: true, writer: false };
+
+  const app = await loadFramework(dir, {
+    modelInvoker: recordingModel([]),
+    middleware: [{
+      beforeStep: (ctx) => {
+        audit.push(`review:${ctx.agentName}`);
+        if (!approvals[ctx.agentName]) {
+          return { skip: true, reason: 'awaiting human approval', output: '[HELD FOR REVIEW]' };
+        }
+        return undefined;
+      },
+      afterStep: (ctx) => { audit.push(`done:${ctx.agentName}`); },
+    }],
   });
 
-  it('every example workflow validates and only names agents that exist', async () => {
-    const { agents, workflows } = await loadProject(EXAMPLES);
-    const known = new Set(agents.map((a) => a.name));
-    assert.deepEqual(
-      workflows.map((w) => w.name).sort(),
-      ['parallel-research', 'research-and-write', 'team-discussion'],
-    );
-    for (const w of workflows) {
-      const v = validateWorkflowDefinition(w);
-      assert.ok(v.ok, `${w.name}: ${v.errors.join(', ')}`);
-      for (const n of w.agents) {
-        assert.ok(known.has(n), `workflow "${w.name}" names unknown agent "${n}"`);
-      }
-    }
+  const result = await app.run('research-and-write', 'a sensitive topic');
+
+  assert.equal(result.output, '[HELD FOR REVIEW]');
+  assert.deepEqual(audit, ['review:researcher', 'done:researcher', 'review:writer']);
+
+  const skipped = result.events.find((e) => e.type === 'step:skipped');
+  assert.equal(skipped.agent, 'writer');
+  assert.equal(skipped.reason, 'awaiting human approval');
+});
+
+test('end to end — run() is a one-call shortcut', async () => {
+  const result = await run({
+    agents: [{ name: 'writer', systemPrompt: 'You write haiku.', model: { name: 'your-model-name' } }],
+    workflow: { name: 'quick', type: 'sequential', agents: ['writer'] },
+    input: 'the sea in winter',
+    modelInvoker: async (_a, prompt) => `haiku about ${prompt}`,
   });
 
-  it('runs each shipped workflow end-to-end with a mock model', async () => {
-    const { agents, workflows } = await loadProject(EXAMPLES);
+  assert.equal(result.output, 'haiku about the sea in winter');
+  assert.equal(result.workflow, 'quick');
+});
 
-    for (const def of workflows) {
-      const orch = createOrchestrator();
-      orch.setModelInvoker(mockInvoker);
-      orch.registerAgents(agents);
-      const result = await orch.runWorkflow(def, 'tidal energy storage');
-      assert.ok(result.output, `${def.name} produced no output`);
-      assert.ok(result.duration >= 0);
-    }
+test('run() rejects a call with no workflow', async () => {
+  await assert.rejects(() => run({ agents: [] }), /requires a "workflow"/);
+});
+
+// ------------------------------------------------- the shipped examples ---
+
+test('the shipped examples run under every orchestration pattern', async () => {
+  const app = await loadFramework(EXAMPLES, {
+    modelInvoker: async (agent, prompt) => `${agent.name}<${prompt.length}>`,
   });
 
+  assert.deepEqual(app.listAgents().sort(), ['engineer', 'math', 'researcher', 'writer']);
+
+  const sequential = await app.run('research-and-write', 'superconductors');
+  assert.match(sequential.output, /^writer</);
+  assert.ok('research_result' in sequential.state);
+
+  const parallel = await app.run('parallel-research', 'superconductors');
+  assert.deepEqual(Object.keys(parallel.output).sort(), ['engineer', 'researcher', 'writer']);
+  assert.ok('perspectives' in parallel.state);
+
+  const conversation = await app.run('team-discussion', 'pick a database');
+  assert.equal(conversation.state.$TRANSCRIPT.length, 10, 'seed + 3 agents x 3 rounds');
+  assert.ok('discussion_summary' in conversation.state);
+});
+
+test('the review-loop example revises until the reviewer approves', async () => {
+  let reviews = 0;
+  const app = await loadFramework(EXAMPLES, {
+    modelInvoker: async (agent) => {
+      if (agent.name === 'engineer') return ++reviews >= 2 ? 'APPROVED — ship it' : 'needs another pass';
+      return `draft revision ${reviews}`;
+    },
+  });
+
+  const result = await app.run('review-loop', 'write the intro');
+
+  assert.equal(reviews, 2, 'rejected once, approved on the second review');
+  assert.equal(result.state.final_text, result.output);
+  assert.deepEqual(
+    result.events.filter((e) => e.type === 'graph:route').map((e) => `${e.from}->${e.to}`),
+    ['draft->review', 'review->draft', 'draft->review', 'review->polish']
+  );
+});
+
+test('the framework runs with no model configured, given an invoker', async () => {
+  // Standalone check: nothing here reads config, env vars or a host system.
+  const app = new Orchestrator();
+  app.registerAgent({ name: 'a', systemPrompt: 'be brief', model: { name: 'unused' } });
+  app.setModelInvoker(async () => 'offline result');
+
+  const result = await app.run({ name: 'w', type: 'sequential', agents: ['a'] }, 'x');
+  assert.equal(result.output, 'offline result');
+});
+
+test('a workflow failure surfaces with the agent and the cause', async (t) => {
+  const dir = await project(t);
+  const app = await loadFramework(dir, {
+    modelInvoker: async (agent) => {
+      if (agent.name === 'writer') throw new Error('model endpoint unreachable');
+      return 'findings';
+    },
+  });
+
+  await assert.rejects(() => app.run('research-and-write', 'x'), /model endpoint unreachable/);
+});
+
+test('a failure mid-workflow can be recovered by middleware', async (t) => {
+  const dir = await project(t);
+  const app = await loadFramework(dir, {
+    modelInvoker: async (agent) => {
+      if (agent.name === 'writer') throw new Error('rate limited');
+      return 'findings';
+    },
+    middleware: [{ onError: (ctx) => ({ output: `[${ctx.agentName} unavailable: ${ctx.error.message}]` }) }],
+  });
+
+  const result = await app.run('research-and-write', 'x');
+  assert.equal(result.output, '[writer unavailable: rate limited]');
 });
