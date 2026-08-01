@@ -1,0 +1,12 @@
+name: research-and-write
+type: sequential
+agents:
+  - researcher
+  - writer
+steps:
+  - agent: researcher
+    input: $INPUT
+    output: research_result
+  - agent: writer
+    input: research_result
+    output: final_article

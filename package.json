@@ -1,0 +1,24 @@
+{
+  "name": "agentropolis",
+  "version": "1.0.0",
+  "description": "agentropolis: an accessible agent-building framework with an optional live city visualization dashboard.",
+  "type": "module",
+  "main": "src/framework/index.mjs",
+  "exports": {
+    ".": "./src/framework/index.mjs",
+    "./engine": "./src/engine.js",
+    "./city": "./src/citySchema.mjs"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/engine.test.js test/city.test.js test/schema.test.js test/framework.test.js test/loader.test.js test/integration.test.js",
+    "test:framework": "node --test test/framework.test.js test/loader.test.js test/integration.test.js",
+    "test:city": "node --test test/engine.test.js test/city.test.js test/schema.test.js",
+    "validate-city": "node src/validateCity.mjs",
+    "smoke": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "js-yaml": "^4.3.1"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,9 @@
+name: team-discussion
+type: conversation
+agents:
+  - researcher
+  - writer
+  - engineer
+conversation:
+  max_rounds: 3
+  selector: round_robin
