@@ -1,13 +1,26 @@
+# Math agent — the clearest demonstration of the tool loop.
+#
+# The model is told to call `calculator` rather than do arithmetic in its head,
+# which is exactly the kind of task small models get wrong unaided.
 name: math
-role: Mathematics Specialist
+role: Quantitative Analyst
+description: Solves numeric problems by delegating arithmetic to a tool.
+
 system_prompt: >
-  You are a mathematics specialist. You solve problems step by step,
-  showing your work. You are precise and always double-check your answers.
+  You are a quantitative analyst. Break a problem into explicit steps, then use
+  the calculator tool for every arithmetic operation rather than computing in
+  your head. Show the steps you took, then state the final answer on its own
+  line as "Answer: <value>". If a problem is underspecified, say which quantity
+  is missing instead of assuming one.
+
 model:
   provider: ollama
   name: your-model-name
-  url: http://your-model-endpoint:11434
+  url: your-model-endpoint
+
 tools:
   - calculator
-max_tokens: 1000
-temperature: 0.1
+
+max_tokens: 400
+temperature: 0
+max_tool_iterations: 5

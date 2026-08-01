@@ -1,13 +1,19 @@
+# Parallel fan-out: three perspectives on the same question, at once.
+#
+# The result is a map of agent name -> output. A branch that fails is reported
+# in a `workflow:partial` event; the run still returns the branches that worked.
 name: parallel-research
 type: parallel
+
 agents:
   - researcher
-  - writer
   - engineer
+  - writer
+
 parallel:
   agents:
     - researcher
-    - writer
     - engineer
+    - writer
   input: $INPUT
-  output: parallel_results
+  output: perspectives
