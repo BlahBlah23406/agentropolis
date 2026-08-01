@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Agent, createAgent } from '../src/framework/Agent.mjs';
-import { ToolRegistry, defineTool } from '../src/framework/Tool.mjs';
+import { Tool, ToolRegistry, defineTool } from '../src/framework/Tool.mjs';
 import { Workflow, createWorkflow } from '../src/framework/Workflow.mjs';
 import { Orchestrator, createOrchestrator } from '../src/framework/Orchestrator.mjs';
 
@@ -275,5 +275,146 @@ describe('Orchestrator', () => {
   it('should throw on unknown workflow', async () => {
     const orch = createOrchestrator();
     await assert.rejects(() => orch.run('ghost', 'test'), /not found/);
+  });
+});
+
+describe('Workflow — event semantics', () => {
+  function oneStepWorkflow() {
+    const a = new Agent({ name: 'a', systemPrompt: 'I am a', model: { name: 'mock' } });
+    a.setModelInvoker(mockInvoker);
+    return new Workflow(
+      { name: 'evt', type: 'sequential', agents: ['a'] },
+      new Map([['a', a]])
+    );
+  }
+
+  it('should notify each listener exactly once per event', async () => {
+    // Regression: the run-scoped event recorder used to be registered as a
+    // listener that re-emitted, so one step fired listeners thousands of times.
+    const wf = oneStepWorkflow();
+    let starts = 0;
+    let completes = 0;
+    wf.on('step:start', () => starts++);
+    wf.on('step:complete', () => completes++);
+
+    await wf.run('input');
+
+    assert.equal(starts, 1);
+    assert.equal(completes, 1);
+  });
+
+  it('should record each event exactly once in the result', async () => {
+    const wf = oneStepWorkflow();
+    const result = await wf.run('input');
+    const types = result.events.map((e) => e.type);
+    assert.deepEqual(types, ['step:start', 'step:complete', 'workflow:complete']);
+  });
+
+  it('should not accumulate listeners or events across runs', async () => {
+    // Regression: run() re-registered its recorder on every call, so event
+    // counts grew with each run of the same Workflow instance.
+    const wf = oneStepWorkflow();
+    let fired = 0;
+    wf.on('step:start', () => fired++);
+
+    const r1 = await wf.run('a');
+    const r2 = await wf.run('b');
+    const r3 = await wf.run('c');
+
+    assert.equal(fired, 3, 'one notification per run, not a growing number');
+    assert.equal(r1.events.length, 3);
+    assert.equal(r2.events.length, 3);
+    assert.equal(r3.events.length, 3);
+  });
+
+  it('should keep event logs separate for concurrent runs', async () => {
+    const wf = oneStepWorkflow();
+    const [r1, r2] = await Promise.all([wf.run('a'), wf.run('b')]);
+    assert.equal(r1.events.length, 3);
+    assert.equal(r2.events.length, 3);
+  });
+
+  it('should stamp every event with a timestamp', async () => {
+    const wf = oneStepWorkflow();
+    const result = await wf.run('input');
+    assert(result.events.every((e) => typeof e.timestamp === 'number'));
+  });
+
+  it('should not let a throwing listener abort the workflow', async () => {
+    const wf = oneStepWorkflow();
+    wf.on('step:start', () => { throw new Error('listener blew up'); });
+    const result = await wf.run('input');
+    assert(result.output);
+  });
+
+  it('should support removing a listener with off()', async () => {
+    const wf = oneStepWorkflow();
+    let fired = 0;
+    const handler = () => fired++;
+    wf.on('step:start', handler);
+    wf.off('step:start', handler);
+    await wf.run('input');
+    assert.equal(fired, 0);
+  });
+});
+
+describe('Workflow — error handling', () => {
+  function failingWorkflow() {
+    const a = new Agent({ name: 'a', systemPrompt: 'I am a', model: { name: 'mock' } });
+    a.setModelInvoker(async () => { throw new Error('model exploded'); });
+    return new Workflow(
+      { name: 'boom', type: 'sequential', agents: ['a'] },
+      new Map([['a', a]])
+    );
+  }
+
+  it('should emit step:error and propagate the failure', async () => {
+    const wf = failingWorkflow();
+    const errors = [];
+    wf.on('step:error', (e) => errors.push(e));
+    await assert.rejects(() => wf.run('input'), /model exploded/);
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].agent, 'a');
+  });
+
+  it('should run onError middleware when a step fails', async () => {
+    const wf = failingWorkflow();
+    const seen = [];
+    wf.use({ onError: async (_ctx, err) => { seen.push(err.message); } });
+    await assert.rejects(() => wf.run('input'));
+    assert(seen.includes('model exploded'));
+  });
+});
+
+describe('Agent — definition casing', () => {
+  it('should accept a snake_case definition object', () => {
+    const agent = new Agent({
+      name: 'bot',
+      system_prompt: 'You are a bot.',
+      max_tokens: 42,
+      model: { name: 'mock' },
+    });
+    assert.equal(agent.systemPrompt, 'You are a bot.');
+    assert.equal(agent.maxTokens, 42);
+  });
+
+  it('should require a model name when using the default invoker', async () => {
+    const agent = new Agent({ name: 'bot', systemPrompt: 'x', model: {} });
+    await assert.rejects(() => agent.invoke('hi'), /no model\.name/);
+  });
+});
+
+describe('Tool namespace', () => {
+  it('should expose define, validate and a registry factory', async () => {
+    const t = Tool.define('echo', 'Echo', { type: 'string' }, async (x) => x);
+    assert.equal(t.name, 'echo');
+
+    const registry = Tool.createRegistry();
+    assert(registry instanceof ToolRegistry);
+
+    const bad = Tool.validate(5, { type: 'string' });
+    assert(!bad.ok);
+    const good = Tool.validate('five', { type: 'string' });
+    assert(good.ok);
   });
 });

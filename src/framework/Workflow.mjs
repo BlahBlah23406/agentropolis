@@ -1,6 +1,8 @@
 // agentropolis — Workflow class
 // Defines orchestration patterns: sequential, parallel, conversation, graph.
 
+import { normalizeDefinition } from './Loader.mjs';
+
 /**
  * A Workflow defines how agents collaborate to process input.
  * Supported patterns:
@@ -12,13 +14,16 @@
 export class Workflow {
   /**
    * Create a workflow from a definition.
-   * @param {WorkflowDefinition} definition
+   * @param {WorkflowDefinition} rawDefinition
    * @param {Map<string, Agent>} agents - map of agent name -> Agent instance
    */
-  constructor(definition, agents) {
-    if (!definition || typeof definition !== 'object') {
+  constructor(rawDefinition, agents) {
+    if (!rawDefinition || typeof rawDefinition !== 'object') {
       throw new Error('Workflow definition must be an object');
     }
+    // Accept snake_case (YAML convention) and camelCase interchangeably.
+    const definition = normalizeDefinition(rawDefinition);
+
     if (!definition.name) throw new Error('Workflow definition must have a name');
     if (!definition.type) throw new Error(`Workflow "${definition.name}" must have a type`);
 
@@ -34,6 +39,7 @@ export class Workflow {
    * Register an event listener.
    * @param {string} event - 'step:start', 'step:complete', 'step:error', 'workflow:complete'
    * @param {Function} handler - (event) => void
+   * @returns {Workflow} this
    */
   on(event, handler) {
     if (!this._listeners.has(event)) this._listeners.set(event, []);
@@ -42,8 +48,24 @@ export class Workflow {
   }
 
   /**
+   * Remove a previously registered listener.
+   * @param {string} event
+   * @param {Function} handler
+   * @returns {Workflow} this
+   */
+  off(event, handler) {
+    const handlers = this._listeners.get(event);
+    if (handlers) {
+      const i = handlers.indexOf(handler);
+      if (i !== -1) handlers.splice(i, 1);
+    }
+    return this;
+  }
+
+  /**
    * Add middleware.
    * @param {Middleware} mw
+   * @returns {Workflow} this
    */
   use(mw) {
     this._middleware.push(mw);
@@ -51,14 +73,34 @@ export class Workflow {
   }
 
   /**
-   * Emit an event to all listeners.
+   * Emit an event to all registered listeners.
+   *
+   * This only dispatches — it never re-enters the workflow's own recording,
+   * so a listener cannot trigger further emissions.
+   *
    * @param {WorkflowEvent} event
    */
   emit(event) {
     const handlers = this._listeners.get(event.type) || [];
     for (const h of handlers) {
-      try { h(event); } catch { /* listener errors don't stop the workflow */ }
+      // A misbehaving listener must not abort the workflow.
+      try { h(event); } catch { /* ignored by design */ }
     }
+  }
+
+  /**
+   * Record an event into the active run's log, then dispatch it to listeners.
+   *
+   * The run context is threaded explicitly rather than stored on the instance,
+   * so concurrent runs of the same Workflow keep separate event logs.
+   *
+   * @param {{state: Object, events: WorkflowEvent[]}} run
+   * @param {WorkflowEvent} event
+   */
+  _emit(run, event) {
+    const stamped = { ...event, timestamp: Date.now() };
+    run.events.push(stamped);
+    this.emit(stamped);
   }
 
   /**
@@ -71,6 +113,17 @@ export class Workflow {
   }
 
   /**
+   * Resolve an agent by name or throw a helpful error.
+   * @param {string} name
+   * @returns {Agent}
+   */
+  _requireAgent(name) {
+    const agent = this.getAgent(name);
+    if (!agent) throw new Error(`Agent "${name}" not found in workflow "${this.name}"`);
+    return agent;
+  }
+
+  /**
    * Run the workflow with the given input.
    * Delegates to the appropriate pattern handler.
    * @param {*} input
@@ -78,88 +131,86 @@ export class Workflow {
    */
   async run(input) {
     const startTime = Date.now();
-    const state = { $INPUT: input };
-    const events = [];
-
-    // capture events
-    const capture = (e) => { events.push({ ...e, timestamp: Date.now() }); this.emit(e); };
-    this.on('step:start', capture);
-    this.on('step:complete', capture);
-    this.on('step:error', capture);
-    this.on('workflow:complete', capture);
+    /** @type {{state: Object, events: WorkflowEvent[]}} */
+    const run = { state: { $INPUT: input }, events: [] };
 
     try {
       let output;
       switch (this.type) {
         case 'sequential':
-          output = await this._runSequential(input, state);
+          output = await this._runSequential(input, run);
           break;
         case 'parallel':
-          output = await this._runParallel(input, state);
+          output = await this._runParallel(input, run);
           break;
         case 'conversation':
-          output = await this._runConversation(input, state);
+          output = await this._runConversation(input, run);
           break;
         case 'graph':
-          output = await this._runGraph(input, state);
+          output = await this._runGraph(input, run);
           break;
         default:
           throw new Error(`Unknown workflow type: ${this.type}`);
       }
 
       const duration = Date.now() - startTime;
-      const result = { output, state, events, duration };
-      this.emit({ type: 'workflow:complete', output, duration });
-      return result;
+      this._emit(run, { type: 'workflow:complete', output, duration });
+      return { output, state: run.state, events: run.events, duration };
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.emit({ type: 'step:error', error, duration });
+      this._emit(run, { type: 'workflow:error', error, duration });
+      await this._runErrorMiddleware({ workflow: this, state: run.state }, error);
       throw error;
     }
   }
 
   /**
+   * Execute one agent step: emit lifecycle events and run middleware around it.
+   * @param {{state: Object, events: WorkflowEvent[]}} run
+   * @param {string} agentName
+   * @param {*} stepInput
+   * @param {Object} [extra] - extra fields merged into emitted events
+   * @returns {Promise<string>} the agent's output
+   */
+  async _runStep(run, agentName, stepInput, extra = {}) {
+    const agent = this._requireAgent(agentName);
+
+    this._emit(run, { type: 'step:start', agent: agentName, input: stepInput, ...extra });
+    const ctx = { agent, input: stepInput, state: run.state, ...extra };
+    await this._runMiddleware('beforeStep', ctx);
+
+    let output;
+    try {
+      output = await agent.invoke(String(stepInput));
+    } catch (error) {
+      this._emit(run, { type: 'step:error', agent: agentName, error, ...extra });
+      await this._runErrorMiddleware(ctx, error);
+      throw error;
+    }
+
+    await this._runMiddleware('afterStep', { ...ctx, output });
+    this._emit(run, { type: 'step:complete', agent: agentName, output, ...extra });
+    return output;
+  }
+
+  /**
    * Sequential: agents run in order, each receiving the previous output.
    */
-  async _runSequential(input, state) {
+  async _runSequential(input, run) {
     const steps = this.definition.steps || [];
     const agentNames = this.definition.agents || [];
     let current = input;
 
-    // If steps are defined, use them; otherwise just chain agents
     if (steps.length > 0) {
       for (const step of steps) {
-        const agent = this.getAgent(step.agent);
-        if (!agent) throw new Error(`Agent "${step.agent}" not found in workflow`);
-
-        const stepInput = resolveVar(step.input, state, current);
-        this.emit({ type: 'step:start', agent: step.agent, input: stepInput });
-
-        await this._runMiddleware('beforeStep', { agent, input: stepInput, state });
-        let output;
-        try {
-          output = await agent.invoke(String(stepInput));
-        } catch (err) {
-          this.emit({ type: 'step:error', agent: step.agent, error: err });
-          throw err;
-        }
-        await this._runMiddleware('afterStep', { agent, input: stepInput, output, state });
-
-        if (step.output) state[step.output] = output;
+        const stepInput = resolveVar(step.input, run.state, current);
+        const output = await this._runStep(run, step.agent, stepInput);
+        if (step.output) run.state[step.output] = output;
         current = output;
-        this.emit({ type: 'step:complete', agent: step.agent, output });
       }
     } else {
       for (const name of agentNames) {
-        const agent = this.getAgent(name);
-        if (!agent) throw new Error(`Agent "${name}" not found in workflow`);
-
-        this.emit({ type: 'step:start', agent: name, input: current });
-        await this._runMiddleware('beforeStep', { agent, input: current, state });
-        const output = await agent.invoke(String(current));
-        await this._runMiddleware('afterStep', { agent, input: current, output, state });
-        current = output;
-        this.emit({ type: 'step:complete', agent: name, output });
+        current = await this._runStep(run, name, current);
       }
     }
 
@@ -169,119 +220,120 @@ export class Workflow {
   /**
    * Parallel: multiple agents run concurrently on the same input.
    */
-  async _runParallel(input, state) {
+  async _runParallel(input, run) {
     const config = this.definition.parallel;
     if (!config || !config.agents) {
       throw new Error('Parallel workflow requires a "parallel.agents" config');
     }
 
-    const stepInput = resolveVar(config.input, state, input);
-    const promises = config.agents.map(async (name) => {
-      const agent = this.getAgent(name);
-      if (!agent) throw new Error(`Agent "${name}" not found in workflow`);
+    const stepInput = resolveVar(config.input, run.state, input);
+    const results = await Promise.all(
+      config.agents.map(async (name) => ({
+        agent: name,
+        output: await this._runStep(run, name, stepInput),
+      }))
+    );
 
-      this.emit({ type: 'step:start', agent: name, input: stepInput });
-      await this._runMiddleware('beforeStep', { agent, input: stepInput, state });
-      const output = await agent.invoke(String(stepInput));
-      await this._runMiddleware('afterStep', { agent, input: stepInput, output, state });
-      this.emit({ type: 'step:complete', agent: name, output });
-      return { agent: name, output };
-    });
-
-    const results = await Promise.all(promises);
     const output = config.output
       ? Object.fromEntries(results.map((r) => [r.agent, r.output]))
       : results;
 
-    if (config.output) state[config.output] = output;
+    if (config.output) run.state[config.output] = output;
     return output;
   }
 
   /**
    * Conversation: agents take turns in a round-robin conversation.
    */
-  async _runConversation(input, state) {
+  async _runConversation(input, run) {
     const config = this.definition.conversation || {};
     const maxRounds = config.maxRounds || 5;
-    const selector = config.selector || 'round_robin';
     const agentNames = this.definition.agents || [];
-    if (agentNames.length === 0) throw new Error('Conversation workflow requires at least one agent');
+    if (agentNames.length === 0) {
+      throw new Error('Conversation workflow requires at least one agent');
+    }
 
     const messages = [{ role: 'user', content: String(input) }];
     let lastOutput = String(input);
 
     for (let round = 0; round < maxRounds; round++) {
       for (const name of agentNames) {
-        const agent = this.getAgent(name);
-        if (!agent) throw new Error(`Agent "${name}" not found in workflow`);
-
         const prompt = messages.map((m) => `${m.role}: ${m.content}`).join('\n');
-        this.emit({ type: 'step:start', agent: name, input: prompt, round });
-        await this._runMiddleware('beforeStep', { agent, input: prompt, state });
-        const output = await agent.invoke(prompt);
-        await this._runMiddleware('afterStep', { agent, input: prompt, output, state });
-
+        const output = await this._runStep(run, name, prompt, { round });
         messages.push({ role: 'assistant', content: output, agent: name });
         lastOutput = output;
-        this.emit({ type: 'step:complete', agent: name, output, round });
       }
     }
 
+    run.state.messages = messages;
     return lastOutput;
   }
 
   /**
    * Graph: conditional routing through named steps.
    */
-  async _runGraph(input, state) {
+  async _runGraph(input, run) {
     const config = this.definition.graph || {};
     const steps = config.steps || this.definition.steps || [];
     if (steps.length === 0) throw new Error('Graph workflow requires steps');
 
-    const stepMap = new Map(steps.map((s) => [s.agent + ':' + (s.input || ''), s]));
-    let currentStep = steps.find((s) => s === steps[0]); // entry step
+    // An explicit `graph.entry` names the first step's agent; otherwise start at the top.
+    let currentStep = config.entry
+      ? steps.find((s) => s.agent === config.entry) || steps[0]
+      : steps[0];
+
     let current = input;
     let iterations = 0;
-    const maxIterations = 100; // safety guard
+    const maxIterations = config.maxIterations || 100; // guard against cyclic graphs
+
+    // Steps are listed as an array, but branch targets are siblings in that
+    // array — so once routing has jumped, falling through to steps[idx + 1]
+    // would run the branch NOT taken as well. After a jump a step continues
+    // only via its own `condition` or `next`; otherwise the graph ends.
+    let jumped = false;
 
     while (currentStep && iterations < maxIterations) {
       iterations++;
-      const agent = this.getAgent(currentStep.agent);
-      if (!agent) throw new Error(`Agent "${currentStep.agent}" not found in workflow`);
 
-      const stepInput = resolveVar(currentStep.input, state, current);
-      this.emit({ type: 'step:start', agent: currentStep.agent, input: stepInput });
-      await this._runMiddleware('beforeStep', { agent, input: stepInput, state });
-      const output = await agent.invoke(String(stepInput));
-      await this._runMiddleware('afterStep', { agent, input: stepInput, output, state });
-
-      if (currentStep.output) state[currentStep.output] = output;
+      const stepInput = resolveVar(currentStep.input, run.state, current);
+      const output = await this._runStep(run, currentStep.agent, stepInput);
+      if (currentStep.output) run.state[currentStep.output] = output;
       current = output;
-      this.emit({ type: 'step:complete', agent: currentStep.agent, output });
 
-      // Conditional routing
       if (currentStep.condition) {
-        const ctx = { state, output, $INPUT: state.$INPUT };
-        const result = evalCondition(currentStep.condition, ctx);
-        const nextAgent = result ? currentStep.condition.then : currentStep.condition.else;
-        if (nextAgent) {
-          currentStep = steps.find((s) => s.agent === nextAgent);
-        } else {
-          currentStep = null;
-        }
+        const passed = evalCondition(currentStep.condition, {
+          state: run.state,
+          output,
+          $INPUT: run.state.$INPUT,
+        });
+        const nextAgent = passed ? currentStep.condition.then : currentStep.condition.else;
+        currentStep = nextAgent ? steps.find((s) => s.agent === nextAgent) : null;
+        jumped = true;
+      } else if (currentStep.next) {
+        currentStep = steps.find((s) => s.agent === currentStep.next) || null;
+        jumped = true;
+      } else if (jumped) {
+        currentStep = null;
       } else {
-        // No condition: try next step in sequence, or stop
         const idx = steps.indexOf(currentStep);
         currentStep = idx < steps.length - 1 ? steps[idx + 1] : null;
       }
+    }
+
+    // Only a graph still holding a pending step has actually run out of road;
+    // one that finished exactly on the last allowed iteration completed fine.
+    if (currentStep && iterations >= maxIterations) {
+      throw new Error(
+        `Graph workflow "${this.name}" exceeded ${maxIterations} iterations — check for a routing cycle`
+      );
     }
 
     return current;
   }
 
   /**
-   * Run middleware hooks.
-   * @param {string} hook
+   * Run a middleware hook across all registered middleware.
+   * @param {'beforeStep'|'afterStep'} hook
    * @param {Object} ctx
    */
   async _runMiddleware(hook, ctx) {
@@ -291,10 +343,27 @@ export class Workflow {
       }
     }
   }
+
+  /**
+   * Run the onError middleware hook.
+   * Errors thrown by an onError handler propagate — that is how middleware
+   * signals "replace this error".
+   * @param {Object} ctx
+   * @param {Error} error
+   */
+  async _runErrorMiddleware(ctx, error) {
+    for (const mw of this._middleware) {
+      if (typeof mw.onError === 'function') {
+        await mw.onError(ctx, error);
+      }
+    }
+  }
 }
 
 /**
  * Resolve a variable reference like "$INPUT" or "research_result" from state.
+ * Unknown references fall through as literal strings, which lets a step supply
+ * a fixed prompt instead of a variable.
  * @param {string} ref
  * @param {Object} state
  * @param {*} fallback
@@ -304,22 +373,25 @@ function resolveVar(ref, state, fallback) {
   if (!ref) return fallback;
   if (ref === '$INPUT') return state.$INPUT ?? fallback;
   if (ref in state) return state[ref];
-  return ref; // literal string if not a variable
+  return ref;
 }
 
 /**
- * Evaluate a condition expression safely.
- * Only supports simple comparisons: output.includes('...'), output === '...', etc.
+ * Evaluate a graph routing condition.
+ *
+ * The expression is evaluated in a function scope whose only bindings are
+ * `output`, `state`, and `$INPUT` — it has no access to workflow internals.
+ * Conditions come from workflow definitions, which are trusted config in the
+ * same way a package.json script is; do not build them from end-user input.
+ *
  * @param {Object} condition
  * @param {Object} ctx
  * @returns {boolean}
  */
 function evalCondition(condition, ctx) {
   try {
-    const expr = condition.if;
-    // very simple: support output.includes('x'), output === 'x', state.var === 'x'
-    const fn = new Function('output', 'state', '$INPUT', `return (${expr})`);
-    return fn(ctx.output, ctx.state, ctx.$INPUT);
+    const fn = new Function('output', 'state', '$INPUT', `return (${condition.if})`);
+    return Boolean(fn(ctx.output, ctx.state, ctx.$INPUT));
   } catch {
     return false;
   }
