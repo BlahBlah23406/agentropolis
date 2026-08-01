@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   loadRegistry, loadCityConfig, mergeCity, validateCityConfig, orphanDeptRefs,
-  CITY_FILE, DEPTS_FILE,
+  CITY_FILE, DEPTS_FILE, registryPath,
 } from './citySchema.mjs';
 
 const OC_HOME = process.env.AGENTROPOLIS_HOME || join(homedir(), '.agentropolis');
@@ -57,5 +57,8 @@ if (orphans.size) {
 }
 
 console.log(`aliases: ${Object.entries(merged.aliases).map(([c, b]) => (c === b ? c : `${c}->${b}`)).join(', ')}`);
-console.log(`registry: ${DEPTS_FILE}`);
+const used = registryPath();
+console.log(used === DEPTS_FILE
+  ? `registry: ${used}`
+  : `registry: ${used} (bundled default; ${DEPTS_FILE} absent)`);
 process.exit(failed ? 1 : 0);

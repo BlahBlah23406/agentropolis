@@ -201,3 +201,31 @@ function validateSchema(value, schema) {
 export function defineTool(name, description, schema, handler) {
   return { name, description, schema, handler };
 }
+
+/**
+ * Validate a value against a JSON schema subset, standalone.
+ * Supports: type, enum, required, properties, items, minimum, maximum,
+ * minLength, maxLength, pattern.
+ * @param {*} value
+ * @param {Object} schema
+ * @returns {{ok: boolean, errors: string[]}}
+ */
+export function validateAgainstSchema(value, schema) {
+  return validateSchema(value, schema);
+}
+
+/**
+ * `Tool` is the namespace form of the tool API, so the documented import
+ * `import { Tool } from 'agentropolis'` works alongside the class form.
+ *
+ * @example
+ * const search = Tool.define('search', 'Search the web',
+ *   { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
+ *   async ({ q }) => `results for ${q}`);
+ */
+export const Tool = Object.freeze({
+  define: defineTool,
+  validate: validateAgainstSchema,
+  Registry: ToolRegistry,
+  createRegistry: () => new ToolRegistry(),
+});

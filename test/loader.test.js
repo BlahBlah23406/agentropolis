@@ -1,9 +1,21 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import {
+  loadAgent,
+  loadWorkflow,
+  loadAgentsFromDir,
+  loadWorkflowsFromDir,
+  loadProject,
+  parseDefinition,
+  normalizeDefinition,
   validateAgentDefinition,
   validateWorkflowDefinition,
 } from '../src/framework/Loader.mjs';
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const EXAMPLES = join(ROOT, 'examples');
 
 describe('Loader — validateAgentDefinition', () => {
   it('should accept a valid agent definition', () => {
@@ -131,5 +143,110 @@ describe('Loader — validateWorkflowDefinition', () => {
     });
     assert(!v.ok);
     assert(v.errors.some((e) => e.includes('graph')));
+  });
+});
+
+describe('Loader — snake_case normalization', () => {
+  it('should map snake_case keys to camelCase', () => {
+    const out = normalizeDefinition({
+      name: 'bot',
+      system_prompt: 'You are a bot.',
+      max_tokens: 500,
+    });
+    assert.equal(out.systemPrompt, 'You are a bot.');
+    assert.equal(out.maxTokens, 500);
+  });
+
+  it('should normalize nested keys', () => {
+    const out = normalizeDefinition({ model: { max_tokens: 10 }, conversation: { max_rounds: 3 } });
+    assert.equal(out.model.maxTokens, 10);
+    assert.equal(out.conversation.maxRounds, 3);
+  });
+
+  it('should leave values untouched, only keys', () => {
+    // State variable names such as `research_result` are values and must survive verbatim.
+    const out = normalizeDefinition({ steps: [{ agent: 'a', output: 'research_result' }] });
+    assert.equal(out.steps[0].output, 'research_result');
+  });
+
+  it('should not rewrite keys inside a JSON schema', () => {
+    const out = normalizeDefinition({
+      name: 't',
+      schema: { type: 'object', properties: { user_name: { type: 'string' } } },
+    });
+    assert.ok('user_name' in out.schema.properties, 'schema property names must not be camelized');
+  });
+
+  it('should leave already-camelCase definitions unchanged', () => {
+    const input = { name: 'bot', systemPrompt: 'x', maxTokens: 5 };
+    assert.deepEqual(normalizeDefinition(input), input);
+  });
+
+  it('should accept snake_case in validateAgentDefinition', () => {
+    const v = validateAgentDefinition({
+      name: 'bot',
+      system_prompt: 'You are a bot.',
+      model: { name: 'mock' },
+    });
+    assert(v.ok, v.errors.join('; '));
+  });
+});
+
+describe('Loader — parseDefinition', () => {
+  it('should parse a YAML string and normalize it', async () => {
+    const def = await parseDefinition('name: bot\nsystem_prompt: Hello\nmax_tokens: 20\n');
+    assert.equal(def.name, 'bot');
+    assert.equal(def.systemPrompt, 'Hello');
+    assert.equal(def.maxTokens, 20);
+  });
+
+  it('should parse a JSON string', async () => {
+    const def = await parseDefinition('{"name":"bot","system_prompt":"Hi"}');
+    assert.equal(def.systemPrompt, 'Hi');
+  });
+});
+
+describe('Loader — loading the shipped example files', () => {
+  it('should load every example agent into a valid definition', async () => {
+    for (const file of ['researcher', 'writer', 'engineer', 'math']) {
+      const def = await loadAgent(join(EXAMPLES, 'agents', `${file}.yaml`));
+      const v = validateAgentDefinition(def);
+      assert(v.ok, `${file}.yaml invalid: ${v.errors.join('; ')}`);
+      assert.equal(typeof def.systemPrompt, 'string');
+    }
+  });
+
+  it('should load every example workflow into a valid definition', async () => {
+    for (const file of ['research-and-write', 'parallel-research', 'conversation']) {
+      const def = await loadWorkflow(join(EXAMPLES, 'workflows', `${file}.yaml`));
+      const v = validateWorkflowDefinition(def);
+      assert(v.ok, `${file}.yaml invalid: ${v.errors.join('; ')}`);
+    }
+  });
+
+  it('should normalize conversation max_rounds from YAML', async () => {
+    const def = await loadWorkflow(join(EXAMPLES, 'workflows', 'conversation.yaml'));
+    assert.equal(def.conversation.maxRounds, 3);
+  });
+
+  it('should load agents and workflows from directories', async () => {
+    const agents = await loadAgentsFromDir(join(EXAMPLES, 'agents'));
+    const workflows = await loadWorkflowsFromDir(join(EXAMPLES, 'workflows'));
+    assert.equal(agents.length, 4);
+    assert.equal(workflows.length, 3);
+  });
+
+  it('should load a whole project directory', async () => {
+    const { agents, workflows } = await loadProject(EXAMPLES);
+    assert.equal(agents.length, 4);
+    assert.equal(workflows.length, 3);
+  });
+
+  it('should return an empty list for a missing directory', async () => {
+    assert.deepEqual(await loadAgentsFromDir(join(EXAMPLES, 'does-not-exist')), []);
+  });
+
+  it('should reject an unsupported file extension', async () => {
+    await assert.rejects(() => loadAgent(join(EXAMPLES, 'agents', 'researcher.txt')), /Unsupported file format/);
   });
 });

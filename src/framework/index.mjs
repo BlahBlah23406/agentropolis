@@ -7,7 +7,7 @@ import { createOrchestrator } from './Orchestrator.mjs';
 
 export { Agent, createAgent } from './Agent.mjs';
 export { Workflow, createWorkflow } from './Workflow.mjs';
-export { ToolRegistry, defineTool } from './Tool.mjs';
+export { Tool, ToolRegistry, defineTool, validateAgainstSchema } from './Tool.mjs';
 export { Orchestrator, createOrchestrator } from './Orchestrator.mjs';
 export {
   loadAgent,

@@ -26,10 +26,13 @@
  * @property {string} agent - agent name for this step
  * @property {string} [input] - input variable name ($INPUT for initial input)
  * @property {string} [output] - output variable name
+ * @property {string} [next] - agent name to run next (graph workflow only).
+ *   A step reached by routing ends the graph unless it declares `next` or a
+ *   `condition`, so sibling branches never run by accident.
  * @property {Object} [condition] - conditional execution (graph workflow only)
  * @property {string} condition.if - JS expression to evaluate
- * @property {string} condition.then - next step name if true
- * @property {string} condition.else - next step name if false
+ * @property {string} condition.then - agent name to run if true
+ * @property {string} condition.else - agent name to run if false
  */
 
 /**

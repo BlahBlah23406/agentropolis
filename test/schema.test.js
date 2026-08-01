@@ -4,19 +4,16 @@
 // layer's no-orphan guarantee against the REAL registry on this machine.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
 import {
   loadRegistry, mergeCity, validateCityConfig, orphanDeptRefs,
-  DEPTS_FILE,
 } from '../src/citySchema.mjs';
 
-// These tests require a real departments.json. Skip gracefully if absent
-// (e.g. running from a fresh clone without a configured registry).
-const hasRegistry = existsSync(DEPTS_FILE);
-const registry = hasRegistry ? loadRegistry() : null;
-const CAPS = hasRegistry ? registry.departments.map((d) => d.id) : [];
+// loadRegistry() falls back to the registry bundled at config/departments.json,
+// so these run against a real registry on a fresh clone too.
+const registry = loadRegistry();
+const CAPS = registry.departments.map((d) => d.id);
 
-test('mergeCity(null): identical vocabulary to the raw registry (pre-builder behavior)', { skip: !hasRegistry }, () => {
+test('mergeCity(null): identical vocabulary to the raw registry (pre-builder behavior)', () => {
   const m = mergeCity(registry, null);
   assert.equal(m.custom, false);
   assert.deepEqual(m.departments.map((d) => d.id).sort(), [...CAPS].sort());
@@ -25,7 +22,7 @@ test('mergeCity(null): identical vocabulary to the raw registry (pre-builder beh
   assert.equal(m.governor.id, 'governor');
 });
 
-test('mergeCity: absorbing city aliases caps to buildings, annexes catch the rest', { skip: !hasRegistry }, () => {
+test('mergeCity: absorbing city aliases caps to buildings, annexes catch the rest', () => {
   const city = {
     cityName: 'Test Town',
     departments: [
@@ -46,7 +43,7 @@ test('mergeCity: absorbing city aliases caps to buildings, annexes catch the res
   for (const c of CAPS) assert.ok(m.aliases[c], `alias for ${c}`);
 });
 
-test('mergeCity: invalid skin degrades to the default city, never throws', { skip: !hasRegistry }, () => {
+test('mergeCity: invalid skin degrades to the default city, never throws', () => {
   const bad = { departments: [{ id: 'x', name: 'X', absorbs: ['not_a_capability'] }] };
   const m = mergeCity(registry, bad);
   assert.equal(m.custom, false);
@@ -54,7 +51,7 @@ test('mergeCity: invalid skin degrades to the default city, never throws', { ski
   assert.deepEqual(m.departments.map((d) => d.id).sort(), [...CAPS].sort());
 });
 
-test('validateCityConfig rejects wire-protocol violations', { skip: !hasRegistry }, () => {
+test('validateCityConfig rejects wire-protocol violations', () => {
   const cases = [
     [{ governor: { id: 'mayor' } }, /must stay "governor"/],
     [{ departments: [{ id: 'a', name: 'A', absorbs: ['research'] }, { id: 'b', name: 'B', absorbs: ['research'] }] }, /already absorbed/],
@@ -70,12 +67,12 @@ test('validateCityConfig rejects wire-protocol violations', { skip: !hasRegistry
   }
 });
 
-test('validateCityConfig accepts a capability id reused by the building that absorbs it', { skip: !hasRegistry }, () => {
+test('validateCityConfig accepts a capability id reused by the building that absorbs it', () => {
   const v = validateCityConfig({ departments: [{ id: 'research', name: 'Research HQ', absorbs: ['research'] }] }, registry);
   assert.equal(v.ok, true, JSON.stringify(v.errors));
 });
 
-test('orphanDeptRefs: catches the exact 2026-07-14 failure shape', { skip: !hasRegistry }, () => {
+test('orphanDeptRefs: catches the exact 2026-07-14 failure shape', () => {
   // a city that renames departments WITHOUT absorbing (the orphan department bug):
   // its buildings host nothing, so emitted ids must surface as orphans...
   const events = [{ dept: 'engineering' }, { to: 'works' }, { from: 'research' }];

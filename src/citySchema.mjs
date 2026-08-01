@@ -24,14 +24,38 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const OC = process.env.AGENTROPOLIS_HOME || join(homedir(), '.agentropolis');
 export const DEPTS_FILE = join(OC, 'departments.json');
 export const CITY_FILE = join(OC, 'city_builder', 'current_city.json');
 export const ASSETS_FILE = join(OC, 'city_builder', 'assets.json');
 
-export function loadRegistry(path = DEPTS_FILE) {
-  return JSON.parse(readFileSync(path, 'utf8'));
+// Shipped with the repo so a fresh checkout has a working registry without any
+// machine-local setup. $AGENTROPOLIS_HOME/departments.json overrides it.
+export const DEFAULT_DEPTS_FILE = fileURLToPath(
+  new URL('../config/departments.json', import.meta.url),
+);
+
+// Which registry file loadRegistry() will actually read.
+export function registryPath() {
+  try {
+    readFileSync(DEPTS_FILE, 'utf8');
+    return DEPTS_FILE;
+  } catch {
+    return DEFAULT_DEPTS_FILE;
+  }
+}
+
+// Reads the operator's registry, falling back to the bundled default when it
+// is absent. An explicit `path` argument is always honored as given.
+export function loadRegistry(path) {
+  if (path !== undefined) return JSON.parse(readFileSync(path, 'utf8'));
+  try {
+    return JSON.parse(readFileSync(DEPTS_FILE, 'utf8'));
+  } catch {
+    return JSON.parse(readFileSync(DEFAULT_DEPTS_FILE, 'utf8'));
+  }
 }
 
 export function loadCityConfig(path = CITY_FILE) {

@@ -97,6 +97,8 @@ agentropolis/
 ├── public/                 # Isometric city UI (optional)
 │   ├── index.html
 │   └── city.js
+├── config/
+│   └── departments.json    # Default capability registry for the city UI
 ├── examples/
 │   ├── agents/             # Example YAML agent definitions
 │   └── workflows/          # Example YAML workflow definitions
@@ -220,6 +222,19 @@ const workflow = {
 };
 ```
 
+Routing rules:
+
+- `entry` names the first step's agent; without it the first listed step runs.
+- `condition.if` is evaluated with `output`, `state`, and `$INPUT` in scope, then
+  routing goes to the `then` or `else` agent. Omitting the branch ends the run.
+- A step reached **by routing** ends the graph unless it declares its own
+  `condition` or a `next: '<agent>'`. Branch targets are siblings in the `steps`
+  array, so without this the branch *not* taken would also run.
+- Steps that were never routed to still fall through to the next step in the
+  array, which is what makes a plain list of steps behave sequentially.
+- Cycles are allowed but bounded by `graph.maxIterations` (default 100), after
+  which the run throws.
+
 ### Events and Middleware
 
 ```javascript
@@ -303,19 +318,45 @@ activity in real time. To use it:
 
 1. Start the server: `npm start` (binds port 8347 by default)
 2. Open `http://127.0.0.1:8347` in your browser
-3. Configure `departments.json` in your `AGENTROPOLIS_HOME` directory
 
 The city visualization is a UI layer on top of the framework — it does not
 affect agent execution. See `SYSTEM.md` for details on the city architecture.
+
+### The department registry
+
+The city is driven by a **capability registry**: `config/departments.json`,
+which ships with the repo and works out of the box. To customize it, copy it to
+`$AGENTROPOLIS_HOME/departments.json` — that copy takes precedence.
+
+The department ids in that file are a **wire protocol**. A custom city
+(`$AGENTROPOLIS_HOME/city_builder/current_city.json`) is a *skin* that may
+rename or group capabilities via `absorbs`, but never delete or redefine them;
+any capability no building absorbs keeps its own default building, so a city
+can never orphan a department. `npm run validate-city` checks this.
+
+### Framework HTTP routes
+
+The server also exposes the framework over HTTP. These are independent of
+`/api/city`, which is unchanged:
+
+| Route | Method | Description |
+|---|---|---|
+| `/api/framework/agents` | GET | Agent definitions found in the project directory |
+| `/api/framework/workflows` | GET | Workflow definitions found in the project directory |
+| `/api/framework/run` | POST | Run a workflow: `{"workflow": "name", "input": "..."}` |
 
 ### Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `AGENTROPOLIS_HOME` | `~/.agentropolis` | Config directory (departments.json, logs, etc.) |
-| `AGENTROPOLIS_HOST` | `localhost` | Hostname shown in state endpoint |
-| `AGENTROPOLIS_PLANNER_MODEL` | `your-model-name` | Model for AI city planner |
-| `AGENTROPOLIS_DISCORD_TO` | (empty) | Discord target for notifications |
+| `PORT` | `8347` | Server port |
+| `HOST` | `0.0.0.0` | Bind address |
+| `AGENTROPOLIS_HOME` | `~/.agentropolis` | Config directory (`departments.json`, city config, logs) |
+| `AGENTROPOLIS_PROJECT_DIR` | `./examples` | Directory with `agents/` + `workflows/` for `/api/framework/*` |
+| `AGENTROPOLIS_HOST` | `localhost` | Hostname shown in the state endpoint |
+| `AGENTROPOLIS_PLANNER_MODEL` | `your-model-name` | Model for the AI city planner |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | Upstream for the `/api/ollama/*` proxy |
+| `OPENCLAW_HOME` | (unset) | Optional OpenClaw install; enables its integration tests |
 
 ## Testing
 
