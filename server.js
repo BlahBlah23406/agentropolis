@@ -27,7 +27,7 @@ import { loadProject, validateAgentDefinition, validateWorkflowDefinition } from
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PORT = Number(process.env.PORT || 8347);
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || '127.0.0.1';
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const OC = process.env.AGENTROPOLIS_HOME || join(homedir(), '.agentropolis');
 const GATEWAY_PORT = Number(process.env.AGENTROPOLIS_GATEWAY_PORT || 18789);

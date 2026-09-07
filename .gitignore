@@ -1,6 +1,9 @@
 node_modules/
 server.log
+server-err.log
 *.bak-*
 *.log
 .DS_Store
 .env
+SYSTEM.md
+city_builder/builder-token.txt

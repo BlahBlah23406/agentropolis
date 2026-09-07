@@ -686,6 +686,21 @@ npm start                     # binds 127.0.0.1:8347 by default
 # open http://127.0.0.1:8347
 ```
 
+### Standalone demo (no backend needed)
+
+Want to see the city without setting up a gateway, database, or model? The
+demo script boots the server with mock data — a default department registry
+and sample events — so the dashboard renders immediately:
+
+```bash
+node scripts/demo-city.mjs    # http://127.0.0.1:8347 with mock data
+PORT=9000 node scripts/demo-city.mjs   # custom port
+```
+
+The demo creates a temporary directory with seed data and cleans it up on
+exit. No files under `~/.agentropolis` are touched. This is the fastest way
+to explore the city UI for evaluation or screenshots.
+
 Features:
 
 - **Live city view** — departments, ministers, activity, and event feed.
