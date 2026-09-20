@@ -95,6 +95,8 @@ export function interpolateEnv(value, env = process.env) {
   }
   if (typeof value !== 'string') return value;
 
+  if (!value.includes('${')) return value;
+
   return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (whole, name, fallback) => {
     const found = env[name];
     if (found !== undefined && found !== '') return found;
