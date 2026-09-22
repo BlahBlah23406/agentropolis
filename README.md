@@ -1,5 +1,9 @@
 # agentropolis
 
+[![Tests](https://github.com/BlahBlah23406/agentropolis/actions/workflows/tests.yml/badge.svg)](https://github.com/BlahBlah23406/agentropolis/actions/workflows/tests.yml)
+[![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](package.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **A small framework for building agents and orchestrating them — with an optional live city dashboard.**
 
 Define agents as YAML (or plain objects), give them tools, and compose them into

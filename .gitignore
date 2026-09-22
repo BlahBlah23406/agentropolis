@@ -7,3 +7,10 @@ server-err.log
 .env
 SYSTEM.md
 city_builder/builder-token.txt
+# AI assistant scratch/config
+.jules/
+.cursor/
+
+# npm is the package manager for this project
+pnpm-lock.yaml
+yarn.lock

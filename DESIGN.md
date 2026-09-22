@@ -238,7 +238,7 @@ Run:
   agentropolis serve
 ```
 
-Scaffold uses an embedded template and sets the default model to the user's existing default (read from `~/.agentropolis/openclaw.json` if present) or `your-local-model` for local-first safety.
+Scaffold writes from an embedded template. The provider comes from `--provider` and defaults to `ollama`, so a fresh project runs against a local model and needs no API key.
 
 #### `build`
 
