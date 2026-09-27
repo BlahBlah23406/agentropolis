@@ -210,7 +210,9 @@ async function transcriptTail(sessionId, maxMsgs = 6, maxLen = 300, tailBytes = 
     await fh.read(buf, 0, len, size - len);
     const lines = buf.toString('utf8').split('\n').slice(1); // first line may be cut
     const msgs = [];
-    for (const line of lines) {
+    // Process backwards to save JSON.parse overhead on irrelevant older lines
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
       let j;
       try { j = JSON.parse(line); } catch { continue; }
       const m = j.message || j;
@@ -220,9 +222,10 @@ async function transcriptTail(sessionId, maxMsgs = 6, maxLen = 300, tailBytes = 
       if (!text) continue;
       // heartbeat/system chatter isn't conversation — keep it off the HoloNet
       if (/^\[agent heartbeat|^HEARTBEAT_OK$|^NO_REPLY$|^SystemExec:/i.test(text)) continue;
-      msgs.push({ role, text: text.slice(0, maxLen) });
+      msgs.unshift({ role, text: text.slice(0, maxLen) });
+      if (msgs.length >= maxMsgs) break;
     }
-    return msgs.slice(-maxMsgs);
+    return msgs;
   } finally {
     await fh.close();
   }
@@ -340,11 +343,14 @@ async function tailCityEvents(maxEvents = 500, tailBytes = 393216) {
     const lines = buf.toString('utf8').split('\n');
     if (len < size) lines.shift(); // first line may be cut
     const events = [];
-    for (const line of lines) {
+    // Process backwards to save JSON.parse overhead
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
       if (!line.trim()) continue;
-      try { events.push(JSON.parse(line)); } catch { /* skip torn line */ }
+      try { events.unshift(JSON.parse(line)); } catch { /* skip torn line */ }
+      if (events.length >= maxEvents) break;
     }
-    return events.slice(-maxEvents);
+    return events;
   } finally {
     await fh.close();
   }
