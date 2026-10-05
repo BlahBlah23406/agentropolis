@@ -1712,6 +1712,15 @@ $('recenter').addEventListener('click', zoomOut);
 // -------------------------------------------------------------------- order & llm --
 async function submitMission(text) {
   if (!text) return;
+
+  const btn = $('issueBtn');
+  const input = $('orderText');
+  const origBtnText = btn.innerHTML;
+
+  btn.disabled = true;
+  input.disabled = true;
+  btn.innerHTML = 'Dispatching...';
+
   ioFlash('incoming');
   toast('inbox', 'Dispatching order to Command...');
 
@@ -1751,6 +1760,11 @@ async function submitMission(text) {
     }
   } catch (err) {
     toast('alert', `Order failed: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    input.disabled = false;
+    btn.innerHTML = origBtnText;
+    input.focus();
   }
 }
 
