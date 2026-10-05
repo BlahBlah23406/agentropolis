@@ -1,7 +1,7 @@
 {
   "name": "agentropolis",
-  "version": "1.1.0",
-  "description": "A small, dependency-light framework for building agents and orchestrating them with sequential, parallel, conversational and graph workflows — with a CLI and an optional live city dashboard.",
+  "version": "1.2.0",
+  "description": "Build AI agent systems by building a city — and watch every message, tool call and decision happen. A small YAML-first agent framework with a CLI and a browser city that runs real models.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -24,13 +24,15 @@
     "./tool": "./src/framework/Tool.mjs",
     "./orchestrator": "./src/framework/Orchestrator.mjs",
     "./loader": "./src/framework/Loader.mjs",
-    "./city": "./src/citySchema.mjs",
+    "./city": "./src/city/index.mjs",
     "./engine": "./src/engine.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./city-schema": "./src/citySchema.mjs"
   },
   "files": [
     "bin/",
     "src/",
+    "city/",
     "public/",
     "examples/",
     "config/",
@@ -55,18 +57,24 @@
     "cli",
     "ollama",
     "openai",
-    "anthropic"
+    "anthropic",
+    "education",
+    "visualization",
+    "no-code",
+    "city-builder",
+    "webgpu"
   ],
   "scripts": {
-    "start": "node server.js",
+    "start": "node city/serve.mjs",
     "prepublishOnly": "npm test",
-    "test": "node --test test/framework.test.js test/loader.test.js test/integration.test.js test/cli.test.js test/engine.test.js test/city.test.js test/schema.test.js",
+    "test": "node --test test/framework.test.js test/loader.test.js test/integration.test.js test/cli.test.js test/engine.test.js test/city.test.js test/schema.test.js test/city-core.test.js",
     "test:framework": "node --test test/framework.test.js test/loader.test.js test/integration.test.js",
     "test:cli": "node --test test/cli.test.js",
     "test:city": "node --test test/engine.test.js test/city.test.js test/schema.test.js",
     "test:server": "node scripts/probe-server.mjs",
     "validate-city": "node src/validateCity.mjs",
-    "smoke": "node test/smoke.mjs"
+    "smoke": "node test/smoke.mjs",
+    "test:citycore": "node --test test/city-core.test.js"
   },
   "dependencies": {
     "js-yaml": "^4.3.2"

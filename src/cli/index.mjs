@@ -9,6 +9,7 @@ import {
   cmdInit, cmdNew, cmdList, cmdValidate, cmdRun, cmdDoctor, cmdCity,
   resolveProjectDir, loadDotEnv,
 } from './commands.mjs';
+import { isCityFile, runCityFile, cmdPlan, cmdTowns, cmdOpenCity } from './cityCommands.mjs';
 
 // Re-exported from the framework so there is exactly one version constant to
 // keep in step with package.json.
@@ -33,9 +34,13 @@ const COMMANDS = {
   ls: cmdList,
   validate: cmdValidate,
   check: cmdValidate,
-  run: cmdRun,
+  // A city file exported from the browser runs directly: run my-city.yaml
+  run: (ctx) => (isCityFile(ctx._[1]) ? runCityFile(ctx, ctx._[1]) : cmdRun(ctx)),
   doctor: cmdDoctor,
-  city: cmdCity,
+  city: cmdOpenCity,
+  dashboard: cmdCity,
+  plan: cmdPlan,
+  towns: cmdTowns,
 };
 
 /** ANSI helpers, disabled when the output is not a terminal. */
@@ -94,6 +99,7 @@ export async function runCli(argv = [], io = {}) {
     out: (line = '') => write(`${line}\n`),
     err: (line = '') => writeErr(`${line}\n`),
     c: colors(colorEnabled),
+    stdin: io.stdin || process.stdin,
   };
 
   try {
@@ -149,6 +155,12 @@ function helpText(c, topic) {
 ${c.bold('USAGE')}
   agentropolis <command> [options]
 
+${c.bold('THE CITY')} ${c.dim('— build and watch agents as a town, in your browser')}
+  ${c.cyan('city')}                    Open the city ${c.dim('--port 4321')}
+  ${c.cyan('towns')} [name]            List or save the starter towns ${c.dim('--out file.yaml')}
+  ${c.cyan('plan')} "<sentence>"       Design a city from a sentence ${c.dim('--out my-city.yaml')}
+  ${c.cyan('run')} <city.yaml>         Run a city file ${c.dim('--input "..." --rehearsal --provider --model --yes --tech')}
+
 ${c.bold('GETTING STARTED')}
   ${c.cyan('init')} [dir]              Create a project you can run immediately
   ${c.cyan('doctor')}                  Check models, keys and dependencies
@@ -161,7 +173,7 @@ ${c.bold('BUILDING')}
 
 ${c.bold('RUNNING')}
   ${c.cyan('run')} <workflow>          Run it   ${c.dim('--input "..." --dry-run --json --quiet')}
-  ${c.cyan('city')}                    Open the optional dashboard ${c.dim('--port 8347')}
+  ${c.cyan('dashboard')}               The older live dashboard ${c.dim('--port 8347')}
 
 ${c.bold('OPTIONS')}
   --dir <path>            Project directory (default: the current one)

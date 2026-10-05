@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Agentropolis</title>
+  <meta name="description" content="A city where AI agents really work. Build an agent system by building a town, and watch every message, tool call and decision happen.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏙️</text></svg>">
+  <link rel="stylesheet" href="city.css">
+</head>
+<body>
+  <canvas id="city" aria-label="The city. Buildings are AI workers; mail vans are messages between them."></canvas>
+
+  <header id="topbar">
+    <div class="brand"><span aria-hidden="true">🏙️</span><b>Agentropolis</b></div>
+    <button id="townBtn" class="chip strong" title="Switch city or make a new one">…</button>
+    <button id="brainBtn" class="chip" title="The AI that does the thinking">🎭 Rehearsal</button>
+    <div id="coins" class="chip quiet" data-term="Coins" title="Coins are tokens: the chunks of text AI models read and write. Providers charge per token.">🪙 0</div>
+    <div class="speed" role="group" aria-label="Speed">
+      <button data-speed="0" title="Pause">⏸</button>
+      <button data-speed="1" class="on" title="Normal speed">1×</button>
+      <button data-speed="2" title="Faster">2×</button>
+      <button data-speed="5" title="Fastest">5×</button>
+    </div>
+    <label class="toggle" title="Show the technical name next to every city word"><input type="checkbox" id="realNames"><span>Real names</span></label>
+    <button id="helpBtn" class="chip quiet" title="Take the 60-second tour">? Tour</button>
+  </header>
+
+  <aside id="news" aria-label="City news">
+    <div class="tabs">
+      <button class="tab on" data-tab="news">📰 City News</button>
+      <button class="tab" data-tab="xray" title="The raw events behind everything you see">🩻 X-ray</button>
+      <button id="newsToggle" class="tab collapse" title="Hide">–</button>
+    </div>
+    <ol id="newsList" class="feed"></ol>
+    <div id="xray" class="feed xray" hidden>
+      <p class="hint">Every animation in the city is caused by one of these real events. Nothing moves on its own.</p>
+      <div id="xrayList"></div>
+      <button id="receiptBtn" class="btn small">⬇️ Download the receipt (JSON)</button>
+    </div>
+  </aside>
+
+  <aside id="panel" hidden aria-live="polite"></aside>
+
+  <nav id="buildbar" aria-label="Build">
+    <button id="hireBtn" class="tool"><span>➕</span>Hire a worker</button>
+    <button id="routeBtn" class="tool"><span>🛣️</span>Work route</button>
+    <button id="newBtn" class="tool"><span>✨</span>New city</button>
+    <button id="dictBtn" class="tool"><span>📖</span>Dictionary</button>
+    <button id="exportBtn" class="tool"><span>⬇️</span>Export</button>
+    <button id="importBtn" class="tool"><span>⬆️</span>Import</button>
+    <button id="shareBtn" class="tool"><span>🔗</span>Share</button>
+  </nav>
+
+  <form id="askbar" autocomplete="off">
+    <div class="row">
+      <input id="ask" aria-label="Your request to the city" placeholder="Ask the city something…">
+      <button id="sendBtn" class="btn primary" type="submit">Send ▶</button>
+      <button id="stopBtn" class="btn danger" type="button" hidden>Stop</button>
+    </div>
+    <button id="exampleBtn" type="button" class="example"></button>
+  </form>
+
+  <div id="modal" hidden><div class="sheet" role="dialog" aria-modal="true"></div></div>
+  <div id="tour" hidden><div class="spot"></div><div class="card"></div></div>
+  <div id="tip" hidden></div>
+  <div id="toast" hidden></div>
+  <input type="file" id="importFile" accept=".yaml,.yml,.json" hidden>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

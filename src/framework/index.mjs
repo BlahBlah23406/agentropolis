@@ -127,4 +127,4 @@ export async function loadFramework(baseDir, options = {}) {
 }
 
 /** Package version, kept in step with package.json. */
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';

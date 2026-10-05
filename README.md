@@ -4,7 +4,41 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**A small framework for building agents and orchestrating them — with an optional live city dashboard.**
+**Build an AI agent system by building a little city — and watch it work.**
+
+Every building is an AI worker (an *agent*). Every road is a route their mail can
+take. When you give the city a job, you watch real messages drive between
+buildings, workers walk to the Library to really search Wikipedia, pages pile up
+on a desk that can overflow, coins drain as tokens are spent, and a signpost
+decides whether the editor sends the work back. Nothing in the city moves unless
+the agents really did something.
+
+```bash
+npx github:BlahBlah23406/agentropolis city
+```
+
+That opens the city in your browser. No account, no key, no setup: it starts in
+*rehearsal* (real tools, scripted thinking), and one click gives it a real brain —
+including a free AI that runs inside the browser tab.
+
+- **Build by describing.** Type "research a topic, write a kid-friendly newsletter,
+  and have an editor check it" and the City Planner hires the workers and lays the roads.
+- **Understand by watching.** Mail vans are messages, errands are tool calls, the
+  desk is the context window, coins are tokens, the Mayor's stamp is
+  human-in-the-loop approval. Flip **Real names** to see the engineering term for
+  everything on screen.
+- **Take it with you.** Your city *is* the agent system: export it as one YAML file
+  and run it from a terminal with `agentropolis run my-city.yaml`.
+
+**→ [Read the City guide](docs/CITY.md)** for the full tour, the city ↔ real-world
+dictionary, and how the city stays faithful to what the agents are doing.
+
+---
+
+## The framework underneath
+
+**A small framework for building agents and orchestrating them.**
+
 
 Define agents as YAML (or plain objects), give them tools, and compose them into
 workflows: sequential pipelines, parallel fan-outs, round-robin conversations, or
@@ -18,7 +52,7 @@ graphs with conditional routing. Run them against any model.
   rewrite, gate on human approval, or recover from failures.
 - **Pure ES modules, JSDoc types, Node 18+.** No TypeScript, no build step.
 
-The isometric city dashboard is an optional UI layer. The framework never imports it.
+The city is an optional layer. The framework never imports it.
 
 > **New here?** Start with the **[onboarding guide](ONBOARDING.md)** — ten minutes,
 > zero configuration, ending with a pipeline you wrote yourself. This README is
@@ -49,7 +83,8 @@ before you have a model, a key, or a network connection.
 - [Model providers](#model-providers)
 - [API reference](#api-reference)
 - [Architecture](#architecture)
-- [City dashboard (optional)](#city-dashboard-optional)
+- [The city](docs/CITY.md)
+- [Live dashboard (optional)](#live-dashboard-optional)
 - [HTTP API](#http-api)
 - [Testing](#testing)
 - [License](#license)
@@ -675,9 +710,13 @@ city modules and the framework still works.
 
 ---
 
-## City dashboard (optional)
+## Live dashboard (optional)
 
-Agentropolis ships with an isometric city that renders an agent system as
+> This is the older, server-backed dashboard for watching a long-running agent
+> deployment. For building and understanding agents, use **[the city](docs/CITY.md)**
+> (`npm start` or `agentropolis city`), which runs entirely in the browser.
+
+The dashboard renders a deployed agent system as
 buildings: each department is a building, missions arrive at the command dome,
 work lights up the districts that handle it, and breakdowns show as visible
 damage until repaired.
@@ -686,7 +725,7 @@ It is a **visualization layer**. It does not affect agent execution, and the
 framework has no knowledge of it.
 
 ```bash
-npm start                     # binds 127.0.0.1:8347 by default
+node server.js                # or: agentropolis dashboard — binds 127.0.0.1:8347
 # open http://127.0.0.1:8347
 ```
 
