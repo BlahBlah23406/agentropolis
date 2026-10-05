@@ -593,6 +593,9 @@ export function resolveVar(ref, state, fallback) {
   return ref;
 }
 
+// Cache for compiled condition expressions to avoid repeatedly invoking `new Function`
+const _conditionCache = new Map();
+
 /**
  * Evaluate a routing / stop condition.
  *
@@ -610,7 +613,11 @@ export function evalCondition(condition, ctx) {
   const expr = typeof condition === 'string' ? condition : condition?.if;
   if (!expr) return false;
   try {
-    const fn = new Function('output', 'state', 'input', '"use strict"; return (' + expr + ');');
+    let fn = _conditionCache.get(expr);
+    if (!fn) {
+      fn = new Function('output', 'state', 'input', '"use strict"; return (' + expr + ');');
+      _conditionCache.set(expr, fn);
+    }
     return Boolean(fn(ctx.output, ctx.state, ctx.input));
   } catch {
     return false;
