@@ -46,6 +46,11 @@ const state = {
 };
 
 const renderer = new CityRenderer($('#city'));
+// Panels sit just under the top bar, however many rows it wraps to.
+new ResizeObserver(() => {
+  const bottom = $('#topbar').getBoundingClientRect().bottom;
+  document.documentElement.style.setProperty('--top-offset', `${Math.max(62, Math.ceil(bottom) + 8)}px`);
+}).observe($('#topbar'));
 // Keep the city in the space the panels leave free.
 renderer.getInsets = () => {
   const narrow = innerWidth <= 700;
