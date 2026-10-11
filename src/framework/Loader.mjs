@@ -45,6 +45,8 @@ async function getYaml() {
  * @returns {string}
  */
 function toCamel(key) {
+  // Optimization: skip the expensive regex replace if there's no underscore.
+  if (!key.includes('_')) return key;
   return key.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
 }
 
