@@ -492,8 +492,8 @@
 </div>
 
 <div id="modeSwitch" role="tablist" aria-label="City mode">
-  <button id="modeView" class="on" role="tab"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg> Live city</button>
-  <button id="modeBuild" role="tab"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 12l-8.5 8.5a2.12 2.12 0 0 1-3-3L12 9M17.64 15 22 10.64M20.91 11.7l-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.26 1.91"/></svg> Build</button>
+  <button id="modeView" class="on" role="tab" aria-selected="true"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg> Live city</button>
+  <button id="modeBuild" role="tab" aria-selected="false"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 12l-8.5 8.5a2.12 2.12 0 0 1-3-3L12 9M17.64 15 22 10.64M20.91 11.7l-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.26 1.91"/></svg> Build</button>
 </div>
 
 <!-- build-mode side panel -->
@@ -509,7 +509,7 @@
   <div class="hint">Each building HOSTS system capabilities (the real plumbing). Placing a prefab takes its capabilities over; anything unhosted keeps a default “annex” building, so nothing ever breaks.</div>
   <div id="palette"></div>
   <div id="builderBtns">
-    <button id="saveCity" disabled><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"/></svg> Save city</button>
+    <button id="saveCity" disabled title="No unsaved changes"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"/></svg> Save city</button>
     <button id="revertCity" title="Reload the last saved city"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13"/></svg> Revert</button>
   </div>
 </div>
@@ -544,7 +544,7 @@
       <div><h2 id="rName">Department</h2><div class="who" id="rWho"></div></div>
       <span class="spacer"></span>
       <span class="status" id="rStatus">working</span>
-      <button id="rClose" aria-label="Back to the city">✕</button>
+      <button id="rClose" aria-label="Back to the city" title="Close (Esc)">✕</button>
     </div>
     <div class="roomSys" id="rSys"></div>
     <div class="roomBody">
@@ -567,7 +567,7 @@
       <span class="glyph"><svg class="ic" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 22h18M5 18v-7M9.5 18v-7M14.5 18v-7M19 18v-7M12 2l9 6H3l9-6z"/></svg></span>
       <div><h2>Governor's Office — Cabinet Room</h2><div class="who" style="color:var(--muted);font-size:12.5px">The Chief of Staff chairs the cabinet while the Governor (you) is away · orders enter and final results leave only through this office</div></div>
       <span class="spacer"></span>
-      <button id="cabClose" aria-label="Back to the city">✕</button>
+      <button id="cabClose" aria-label="Back to the city" title="Close (Esc)">✕</button>
     </div>
     <div id="meetBanner">No cabinet meeting in session</div>
     <div id="cabTableWrap">
@@ -606,7 +606,7 @@
         <span class="star-icon">📦</span>
         <h2>Deliverables & Output Hub</h2>
       </div>
-      <button id="hubClose" class="btn-close" aria-label="Close Output Hub">✕</button>
+      <button id="hubClose" class="btn-close" aria-label="Close Output Hub" title="Close (Esc)">✕</button>
     </div>
     <div class="hub-filter-bar">
       <input id="hubSearch" type="search" placeholder="Filter deliverables or content…" autocomplete="off" aria-label="Filter deliverables">
@@ -634,7 +634,7 @@
         <span class="star-icon">🔑</span>
         <h2>BYOK API Key Management</h2>
       </div>
-      <button id="byokClose" class="btn-close" aria-label="Close BYOK Settings">✕</button>
+      <button id="byokClose" class="btn-close" aria-label="Close BYOK Settings" title="Close (Esc)">✕</button>
     </div>
     <div class="modal-body">
       <p class="form-desc">Connect Agentropolis to your Ollama Cloud instance or custom endpoint to power real <code>your-model-name</code> task decomposition and council reasoning.</p>
@@ -671,7 +671,7 @@
   </div>
   <form id="orderForm">
     <input id="orderText" placeholder="Governor's order to the Chief of Staff… (runs a real agent turn; reply lands in Output Hub & Discord)" autocomplete="off" aria-label="New order">
-    <button id="issueBtn" type="submit">Issue order</button>
+    <button id="issueBtn" type="submit" title="Press Enter to issue order">Issue order</button>
   </form>
 </div>
 
