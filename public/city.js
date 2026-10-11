@@ -1247,6 +1247,7 @@ function refreshDraft() {
   renderInspector();
   $('cityName').textContent = state.draft.cityName || 'Agentropolis';
   $('saveCity').disabled = !state.dirty;
+  $('saveCity').title = state.dirty ? 'Save your city layout' : 'No unsaved changes';
 }
 
 function setMode(mode) {
@@ -1257,7 +1258,9 @@ function setMode(mode) {
   state.placing = null;
   document.body.classList.toggle('building', mode === 'build');
   $('modeView').classList.toggle('on', mode === 'view');
+  $('modeView').setAttribute('aria-selected', mode === 'view' ? 'true' : 'false');
   $('modeBuild').classList.toggle('on', mode === 'build');
+  $('modeBuild').setAttribute('aria-selected', mode === 'build' ? 'true' : 'false');
   if (mode === 'build') {
     state.draft = draftFromLive();
     state.dirty = false;
@@ -1269,7 +1272,9 @@ function setMode(mode) {
       state.mode = 'build';
       document.body.classList.add('building');
       $('modeView').classList.remove('on');
+      $('modeView').setAttribute('aria-selected', 'false');
       $('modeBuild').classList.add('on');
+      $('modeBuild').setAttribute('aria-selected', 'true');
       return;
     }
     state.draft = null;
@@ -1373,7 +1378,7 @@ function renderInspector() {
   box.innerHTML = `
     <div class="ihead">${icon(DEPT_ICON[entry.icon] || (isGov ? 'landmark' : 'activity'), 18)}
       <input id="iName" value="${esc(entry.name || '')}" ${annex ? 'disabled' : ''} maxlength="80" aria-label="Building name">
-      <button id="iClose" aria-label="Close">✕</button></div>
+      <button id="iClose" aria-label="Close" title="Close (Esc)">✕</button></div>
     ${annex ? `<div class="inote">This is an <b>annex</b> — the default building for “${esc(state.selected)}”. Place a prefab that absorbs it (or tick it under another building) to replace it.</div>` : ''}
     ${!annex ? `<label class="ilbl">Minister <input id="iMinister" value="${esc(entry.minister || '')}" maxlength="80"></label>` : ''}
     ${!annex ? `<label class="ilbl">Color <input id="iColor" type="color" value="${esc(entry.color || '#4f8ef7')}"></label>
@@ -1430,6 +1435,7 @@ async function saveDraft() {
   const tok = await builderToken(false);
   if (tok === null) return;
   $('saveCity').disabled = true;
+  $('saveCity').title = 'No unsaved changes';
   try {
     const res = await fetch('/api/city/save', {
       method: 'POST',
