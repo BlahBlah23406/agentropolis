@@ -1475,7 +1475,7 @@ async function aiPlan() {
   if (tok === null) return;
   state.aiBusy = true;
   $('aiGo').disabled = true;
-  $('aiGo').innerHTML = `${icon('sparkles', 13)} the AI planner is drafting…`;
+  $('aiGo').innerHTML = `<span style="animation: fp 2s infinite; display: inline-block;">${icon('sparkles', 13)}</span> the AI planner is drafting…`;
   toast('sparkles', 'Sent to the AI City Planner (the AI planner) — takes ~15-60s.');
   try {
     const res = await fetch('/api/city/ai-plan', {
@@ -1719,7 +1719,7 @@ async function submitMission(text) {
 
   btn.disabled = true;
   input.disabled = true;
-  btn.innerHTML = 'Dispatching...';
+  btn.innerHTML = `<span style="animation: fp 2s infinite; display: inline-block;">${icon('activity', 13)}</span> Dispatching...`;
 
   ioFlash('incoming');
   toast('inbox', 'Dispatching order to Command...');
