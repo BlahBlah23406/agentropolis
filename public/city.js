@@ -464,7 +464,19 @@ function addFeed(e) {
   while (feedList.children.length > 80) feedList.lastChild.remove();
 }
 $('feedSearchInput').addEventListener('input', applyFeedFilter);
-$('feedHead').addEventListener('click', () => $('feed').classList.toggle('collapsed'));
+$('feedHead').addEventListener('click', (e) => {
+  if (e.target.closest('#feedSearch')) return;
+  const isCollapsed = $('feed').classList.toggle('collapsed');
+  $('feedHead').setAttribute('aria-expanded', !isCollapsed);
+});
+$('feedHead').addEventListener('keydown', (e) => {
+  if (e.target.closest('#feedSearch')) return;
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    const isCollapsed = $('feed').classList.toggle('collapsed');
+    $('feedHead').setAttribute('aria-expanded', !isCollapsed);
+  }
+});
 
 // ------------------------------------------------------------------- toasts --
 function toast(iconName, msg, err) {
