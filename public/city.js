@@ -30,6 +30,17 @@ function fitCanvas() {
 
 const $ = (id) => document.getElementById(id);
 
+
+// Performance optimization: debounce frequent UI updates
+function debounce(fn, delay) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+
 // ------------------------------------------------------------------- icons --
 const ICONS = {
   landmark: 'M3 22h18M5 18v-7M9.5 18v-7M14.5 18v-7M19 18v-7M12 2l9 6H3l9-6z',
@@ -463,7 +474,7 @@ function addFeed(e) {
   div.style.display = matchesSearch(msg ? msg.textContent : div.textContent, feedFilterText) ? '' : 'none';
   while (feedList.children.length > 80) feedList.lastChild.remove();
 }
-$('feedSearchInput').addEventListener('input', applyFeedFilter);
+$('feedSearchInput').addEventListener('input', debounce(applyFeedFilter, 300));
 $('feedHead').addEventListener('click', () => $('feed').classList.toggle('collapsed'));
 
 // ------------------------------------------------------------------- toasts --
@@ -1152,7 +1163,7 @@ function renderCabinet() {
   }
 }
 
-$('cabSearch').addEventListener('input', renderCabinet);
+$('cabSearch').addEventListener('input', debounce(renderCabinet, 300));
 
 function openCabinet() {
   hideTooltip();
@@ -1945,7 +1956,7 @@ function renderOutputHub() {
 
 $('hubBtn').addEventListener('click', openOutputHub);
 $('hubClose').addEventListener('click', closeOutputHub);
-$('hubSearch').addEventListener('input', renderOutputHub);
+$('hubSearch').addEventListener('input', debounce(renderOutputHub, 300));
 $('hubDeptFilter').addEventListener('change', renderOutputHub);
 
 // ========================================================== BYOK SETTINGS ==
