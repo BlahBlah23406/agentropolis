@@ -197,7 +197,7 @@ function hash(s) {
 // center), d (registry entry) }  positions come from the city config when
 // set; otherwise a stable auto ring around the capitol.
 const buildings = new Map();
-const roadTiles = new Set();     // "gx,gy"
+const roadTiles = new Uint8Array(GRID * GRID); // gy * GRID + gx
 const roadPaths = new Map();     // building id -> [ {x,y} world waypoints to plaza ]
 let decor = [];
 
@@ -220,7 +220,7 @@ function autoSlots() {
 function layoutCity() {
   const reg = activeReg();
   buildings.clear();
-  roadTiles.clear();
+  roadTiles.fill(0);
   roadPaths.clear();
 
   const govPos = reg.governor.pos || { gx: GRID / 2 - 2, gy: GRID / 2 - 2 };
@@ -268,7 +268,7 @@ function buildRoads() {
     path.push([cx, cy]);
     while (cx !== tx) { cx += Math.sign(tx - cx); path.push([cx, cy]); }
     while (cy !== ty) { cy += Math.sign(ty - cy); path.push([cx, cy]); }
-    for (const [gx, gy] of path) roadTiles.add(`${gx},${gy}`);
+    for (const [gx, gy] of path) roadTiles[gy * GRID + gx] = 1;
     roadPaths.set(id, path.map(([gx, gy]) => isoXY(gx + 0.5, gy + 0.5)));
   }
 }
@@ -277,7 +277,7 @@ function defaultDecor() {
   const r = hash('agentropolis-decor');
   const out = [];
   const occupied = (gx, gy) => {
-    if (roadTiles.has(`${gx},${gy}`)) return true;
+    if (roadTiles[gy * GRID + gx] === 1) return true;
     for (const b of buildings.values()) {
       if (gx >= b.gx - 1 && gx < b.gx + b.f + 1 && gy >= b.gy - 1 && gy < b.gy + b.f + 1) return true;
     }
@@ -580,8 +580,8 @@ function diamond(cx, cy, w = TW, h = TH) {
 
 function drawTile(gx, gy) {
   const { x, y } = isoXY(gx + 0.5, gy + 0.5);
-  const key = `${gx},${gy}`;
-  const road = roadTiles.has(key);
+  // OPTIMIZATION: Replacing Set.has string allocation with direct Uint8Array lookup
+  const road = roadTiles[gy * GRID + gx] === 1;
   diamond(x, y);
   ctx.fillStyle = road ? C.road : ((gx + gy) % 2 ? C.grassA : C.grassB);
   ctx.fill();
@@ -593,7 +593,7 @@ function drawTile(gx, gy) {
     ctx.strokeStyle = C.roadDash;
     ctx.lineWidth = 1.2;
     ctx.setLineDash([4, 5]);
-    const n1 = roadTiles.has(`${gx + 1},${gy}`) || roadTiles.has(`${gx - 1},${gy}`);
+    const n1 = (gx < GRID - 1 && roadTiles[gy * GRID + (gx + 1)] === 1) || (gx > 0 && roadTiles[gy * GRID + (gx - 1)] === 1);
     ctx.beginPath();
     if (n1) { ctx.moveTo(x - TW / 4, y - TH / 4); ctx.lineTo(x + TW / 4, y + TH / 4); }
     else { ctx.moveTo(x + TW / 4, y - TH / 4); ctx.lineTo(x - TW / 4, y + TH / 4); }
