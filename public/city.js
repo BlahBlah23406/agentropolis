@@ -464,6 +464,7 @@ function addFeed(e) {
   while (feedList.children.length > 80) feedList.lastChild.remove();
 }
 $('feedSearchInput').addEventListener('input', applyFeedFilter);
+$('feedSearchInput').addEventListener('click', (e) => e.stopPropagation());
 $('feedHead').addEventListener('click', () => $('feed').classList.toggle('collapsed'));
 
 // ------------------------------------------------------------------- toasts --
